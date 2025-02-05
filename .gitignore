@@ -2,7 +2,8 @@
 # Edit at https://www.toptal.com/developers/gitignore?templates=linux,visualstudiocode,python,spark,git
 
 ### my own files ###
-data/pupil-absence-in-schools-in-england_2018-19
+data/raw/
+src/_version.py
 
 ### Git ###
 # Created by git for backups. To disable backups in Git:
