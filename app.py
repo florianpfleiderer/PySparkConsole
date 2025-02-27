@@ -8,7 +8,7 @@ Some versions of Textual auto-load textual.css; if not, see "Manual CSS Loading"
 """
 
 from __future__ import annotations
-import os
+from pathlib import Path
 
 from rich.console import Console
 from rich.table import Table
@@ -18,8 +18,9 @@ from rich.prompt import Prompt
 from rich import box
 
 from src.spark_session import create_spark_session, stop_spark_session
+from datetime import datetime
 
-DATA_DIR = "data/raw"
+DATA_DIR = Path("data/")
 
 class SparkDataConsoleApp:
     """A console app for PySpark data manipulation."""
@@ -68,8 +69,7 @@ class SparkDataConsoleApp:
         """Load data from a CSV file."""
         self.console.print(Panel("[bold]Load Data[/bold]", border_style="yellow"))
         try:
-            files = os.listdir(DATA_DIR)
-            csv_files = [f for f in files if f.endswith('.csv')]
+            csv_files = list(DATA_DIR.rglob('*.csv'))
             
             if not csv_files:
                 self.console.print("[bold red]No CSV files found in data/raw directory[/bold red]")
@@ -80,7 +80,7 @@ class SparkDataConsoleApp:
             table.add_column("Filename", style="green")
             
             for i, file in enumerate(csv_files, 1):
-                table.add_row(str(i), file)
+                table.add_row(str(i), file.name)
                 
             self.console.print(table)
                 
@@ -90,13 +90,13 @@ class SparkDataConsoleApp:
                 
             try:
                 index = int(choice) - 1
-                file_path = os.path.join(DATA_DIR, csv_files[index])
+                file_path = csv_files[index]
                 
                 with Progress(SpinnerColumn(), TextColumn("[green]Loading data...[/green]")) as progress:
                     task = progress.add_task("", total=None)
-                    self.df = self.session.read.csv(file_path, header=True, inferSchema=True)
+                    self.df = self.session.read.csv(str(file_path), header=True, inferSchema=True)
                     
-                self.console.print(f"[bold green]Loaded:[/bold green] {csv_files[index]}")
+                self.console.print(f"[bold green]Loaded:[/bold green] {file_path.name}")
                 self._display_dataframe(self.df, 5)
                 
             except (ValueError, IndexError):
@@ -168,13 +168,15 @@ class SparkDataConsoleApp:
         path = Prompt.ask("Enter save path (or 'c' to cancel)")
         if path.lower() == 'c':
             return
-            
+        else:
+            path = Path(path) / Path(datetime.now().strftime('%Y-%m-%d_%H-%M'))
         try:
+            save_path = Path(path)
             with Progress(SpinnerColumn(), TextColumn("[green]Saving data...[/green]")) as progress:
                 task = progress.add_task("", total=None)
-                self.df.write.csv(path, header=True, mode="overwrite")
+                self.df.repartition(1).write.csv(str(save_path), header=True, mode="errorifexists")
             
-            self.console.print(f"[bold green]Data saved to:[/bold green] {path}")
+            self.console.print(f"[bold green]Data saved to:[/bold green] {save_path}")
         except Exception as e:
             self.console.print(f"[bold red]Error saving data:[/bold red] {str(e)}")
     
