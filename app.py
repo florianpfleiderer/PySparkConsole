@@ -165,13 +165,14 @@ class SparkDataConsoleApp:
             return
             
         self.console.print(Panel("[bold]Save Data[/bold]", border_style="yellow"))
-        path = Prompt.ask("Enter save path (or 'c' to cancel)")
+        path = Prompt.ask("Enter save path (or 'd' for default or 'c' to cancel)")
         if path.lower() == 'c':
             return
-        else:
-            path = Path(path) / Path(datetime.now().strftime('%Y-%m-%d_%H-%M'))
+        elif path.lower() == 'd':
+            path = "data/processed"
+
         try:
-            save_path = Path(path)
+            save_path = Path(path) / Path(datetime.now().strftime('%Y-%m-%d_%H-%M'))
             with Progress(SpinnerColumn(), TextColumn("[green]Saving data...[/green]")) as progress:
                 task = progress.add_task("", total=None)
                 self.df.repartition(1).write.csv(str(save_path), header=True, mode="errorifexists")
