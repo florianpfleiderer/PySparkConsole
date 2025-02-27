@@ -17,6 +17,8 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.prompt import Prompt
 from rich import box
 
+from pyspark.sql import SparkSession, DataFrame
+
 from src.spark_session import create_spark_session, stop_spark_session
 from datetime import datetime
 
@@ -25,12 +27,12 @@ DATA_DIR = Path("data/")
 class SparkDataConsoleApp:
     """A console app for PySpark data manipulation."""
 
-    def __init__(self):
-        self.session = None
-        self.df = None
-        self.console = Console()
+    def __init__(self) -> None:
+        self.session: SparkSession = None
+        self.df: DataFrame = None
+        self.console: Console = Console()
         
-    def start(self):
+    def start(self) -> None:
         """Start the application."""
         self.console.print(Panel("[bold blue]Welcome to SparkDataApp[/bold blue]", 
                                 border_style="green"))
@@ -41,7 +43,7 @@ class SparkDataConsoleApp:
         
         self.run_main_loop()
     
-    def run_main_loop(self):
+    def run_main_loop(self) -> None:
         """Run the main application loop."""
         while True:
             menu = """
