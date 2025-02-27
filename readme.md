@@ -9,15 +9,7 @@
 Console choices:
 
 * Typer (parse args) + Rich (for output formatting)
-* maybe textual
-
-### textual
-
-in the first console window, run: `textual console`, then in the second one:
-
-```
-textual run --dev my_app.py
-```
+* 
 
 ## Preliminary Research - How to start this?
 
