@@ -281,115 +281,62 @@ class SparkDataConsoleApp:
         viz_table = Table(show_header=True, header_style="bold magenta", box=box.ROUNDED)
         viz_table.add_column("#", style="dim", width=6)
         viz_table.add_column("Visualization Type", style="green")
+        viz_table.add_column("Status", style="yellow")
         
-        for i, viz in enumerate(viz_types, 1):
-            viz_table.add_row(str(i), viz)
+        # Mark the visualization types that are unavailable without pandas
+        statuses = ["Coming soon", "Coming soon", "Coming soon", "Coming soon"]
+        
+        for i, (viz, status) in enumerate(zip(viz_types, statuses), 1):
+            viz_table.add_row(str(i), viz, status)
             
         self.console.print(viz_table)
         
-        choice = Prompt.ask("Select visualization type", choices=["1", "2", "3", "4"])
+        self.console.print("\n[bold yellow]Note:[/bold yellow] Advanced visualization features are coming soon. These will be implemented without using pandas library.")
         
-        # Select columns for visualization
-        col_table = Table(show_header=True, header_style="bold magenta", box=box.ROUNDED)
-        col_table.add_column("#", style="dim", width=6)
-        col_table.add_column("Column", style="green")
-        col_table.add_column("Data Type", style="blue")
+        # Offer basic visualization options that don't require pandas
+        self.console.print("\n[bold cyan]Basic Data Statistics[/bold cyan]")
         
-        numeric_cols = []
-        for i, field in enumerate(self.df.schema.fields, 1):
-            data_type = str(field.dataType)
-            col_table.add_row(str(i), field.name, data_type)
-            if "int" in data_type.lower() or "double" in data_type.lower() or "float" in data_type.lower():
-                numeric_cols.append((i, field.name))
+        if Confirm.ask("Would you like to see summary statistics for the current data?"):
+            # Display basic statistics using native PySpark functionality
+            try:
+                stats_table = Table(show_header=True, header_style="bold magenta", box=box.ROUNDED)
+                stats_table.add_column("Column", style="green")
+                stats_table.add_column("Count", style="blue")
+                stats_table.add_column("Mean", style="blue")
+                stats_table.add_column("Min", style="blue")
+                stats_table.add_column("Max", style="blue")
                 
-        self.console.print(col_table)
-        
-        try:
-            if choice == "1":  # Bar Chart
-                self.console.print("[bold cyan]Creating Bar Chart[/bold cyan]")
-                
-                cat_col = Prompt.ask("Select category column (x-axis)")
-                val_col = Prompt.ask("Select value column (y-axis)")
-                
-                cat_index = int(cat_col) - 1
-                val_index = int(val_col) - 1
-                
-                cat_name = self.df.columns[cat_index]
-                val_name = self.df.columns[val_index]
-                
-                with Progress(SpinnerColumn(), TextColumn("[green]Creating visualization...[/green]")) as progress:
-                    task = progress.add_task("", total=None)
-                    
-                    # Convert to Pandas for easier plotting
-                    result = self.df.groupBy(cat_name).agg(F.sum(val_name).alias(f"sum_{val_name}"))
-                    pdf = result.toPandas()
-                    
-                    plt.figure(figsize=(10, 6))
-                    plt.bar(pdf[cat_name], pdf[f"sum_{val_name}"])
-                    plt.xlabel(cat_name)
-                    plt.ylabel(f"Sum of {val_name}")
-                    plt.title(f"{val_name} by {cat_name}")
-                    plt.xticks(rotation=45)
-                    plt.tight_layout()
-                    
-                    # Save the visualization
-                    viz_path = "visualization.png"
-                    plt.savefig(viz_path)
-                    plt.close()
-                    
-                self.console.print(f"[bold green]Visualization saved to {viz_path}[/bold green]")
-                
-            elif choice == "2":  # Histogram
-                self.console.print("[bold cyan]Creating Histogram[/bold cyan]")
+                # Get numeric columns
+                numeric_cols = []
+                for field in self.df.schema.fields:
+                    data_type = str(field.dataType).lower()
+                    if "int" in data_type or "double" in data_type or "float" in data_type:
+                        numeric_cols.append(field.name)
                 
                 if not numeric_cols:
-                    self.console.print("[bold red]No numeric columns available for histogram[/bold red]")
+                    self.console.print("[yellow]No numeric columns found for statistics[/yellow]")
                     return
-                    
-                # Show only numeric columns
-                num_table = Table(show_header=True, header_style="bold magenta", box=box.ROUNDED)
-                num_table.add_column("#", style="dim", width=6)
-                num_table.add_column("Numeric Column", style="green")
                 
-                for i, (original_id, col_name) in enumerate(numeric_cols, 1):
-                    num_table.add_row(str(i), col_name)
-                    
-                self.console.print(num_table)
+                # Calculate statistics using PySpark built-in methods
+                summary = self.df.select(numeric_cols).summary("count", "mean", "min", "max").collect()
+                count_row = summary[0]
+                mean_row = summary[1]
+                min_row = summary[2]
+                max_row = summary[3]
                 
-                val_choice = Prompt.ask("Select numeric column for histogram")
-                val_index = int(val_choice) - 1
+                for col in numeric_cols:
+                    stats_table.add_row(
+                        col,
+                        count_row[col],
+                        mean_row[col],
+                        min_row[col],
+                        max_row[col]
+                    )
                 
-                if val_index < 0 or val_index >= len(numeric_cols):
-                    raise ValueError("Invalid selection")
-                    
-                _, col_name = numeric_cols[val_index]
-                bins = Prompt.ask("Number of bins", default="10")
+                self.console.print(stats_table)
                 
-                with Progress(SpinnerColumn(), TextColumn("[green]Creating histogram...[/green]")) as progress:
-                    task = progress.add_task("", total=None)
-                    
-                    # Convert to Pandas for easier plotting
-                    pdf = self.df.select(col_name).toPandas()
-                    
-                    plt.figure(figsize=(10, 6))
-                    plt.hist(pdf[col_name], bins=int(bins))
-                    plt.xlabel(col_name)
-                    plt.ylabel("Frequency")
-                    plt.title(f"Histogram of {col_name}")
-                    plt.tight_layout()
-                    
-                    # Save the visualization
-                    viz_path = "histogram.png"
-                    plt.savefig(viz_path)
-                    plt.close()
-                    
-                self.console.print(f"[bold green]Histogram saved to {viz_path}[/bold green]")
-                
-            elif choice == "3" or choice == "4":  # Scatter Plot or Pie Chart
-                self.console.print(f"[bold yellow]Coming soon: {viz_types[int(choice)-1]}[/bold yellow]")
-                
-        except Exception as e:
-            self.console.print(f"[bold red]Error creating visualization:[/bold red] {str(e)}")
+            except Exception as e:
+                self.console.print(f"[bold red]Error generating statistics:[/bold red] {str(e)}")
     
     def filter_data(self):
         """Filter data with custom conditions."""
@@ -528,7 +475,7 @@ class SparkDataConsoleApp:
 
 * `l` - **Load data**: Load a CSV file into a Spark DataFrame
 * `/` - **Query data**: Filter data by column values
-* `v` - **Visualize data**: Create charts and graphs from your data
+* `v` - **Visualize data**: View basic statistics (advanced visualization coming soon)
 * `f` - **Filter data**: Apply custom filters to your data
 * `s` - **Save data**: Export data to various formats
 * `h` - **Help**: Show this help message
@@ -538,7 +485,7 @@ class SparkDataConsoleApp:
 
 * When loading data, the application will scan the data directory for CSV files
 * Use query and filter to narrow down your dataset
-* Visualization options let you create common chart types
+* Statistics and basic data information are available in the visualize menu
 * Save your results in various formats for later use
         """
         
