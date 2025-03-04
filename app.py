@@ -512,16 +512,42 @@ class SparkDataConsoleApp:
         
         table = Table(show_header=True, header_style="bold magenta", box=box.ROUNDED)
         
-        # Add columns
-        for field in schema.fields:
+        # Add columns (limit to 10 if more exist)
+        fields = schema.fields
+        max_cols = 10
+        total_cols = len(fields)
+        display_fields = fields[:max_cols] if total_cols > max_cols else fields
+        
+        # Add columns to table
+        for field in display_fields:
             table.add_column(field.name, style="green")
+            
+        # If we have more than max_cols columns, add a note column
+        if total_cols > max_cols:
+            table.add_column("...", style="dim")
         
         # Add rows
         for row in data:
-            table.add_row(*[str(v) for v in row])
+            # Get values for visible columns
+            visible_values = [str(row[i]) for i in range(min(max_cols, total_cols))]
+            
+            # If we have truncated columns, add an indicator
+            if total_cols > max_cols:
+                visible_values.append(f"({total_cols - max_cols} more)")
+                
+            table.add_row(*visible_values)
             
         self.console.print(table)
-        self.console.print(f"[italic](Showing {min(num_rows, df.count())} of {df.count()} rows)[/italic]")
+        
+        # Show information about truncation
+        info_parts = []
+        if num_rows < df.count():
+            info_parts.append(f"Showing {min(num_rows, df.count())} of {df.count()} rows")
+        if total_cols > max_cols:
+            info_parts.append(f"Showing {max_cols} of {total_cols} columns")
+            
+        if info_parts:
+            self.console.print(f"[italic]({' | '.join(info_parts)})[/italic]")
 
 def parse_args():
     """Parse command line arguments."""
