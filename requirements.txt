@@ -2,3 +2,4 @@ pyspark
 numpy
 matplotlib
 rich
+pandas
