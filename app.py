@@ -12,6 +12,7 @@ from pathlib import Path
 import argparse
 import os
 import sys
+import logging
 from typing import Optional, List, Dict, Any
 
 from rich.console import Console
@@ -34,6 +35,9 @@ from datetime import datetime
 
 # Install rich traceback handler for better error display
 install_rich_traceback()
+
+# Configure logging
+logging.basicConfig(level=logging.ERROR)
 
 # Default data directory
 DEFAULT_DATA_DIR = Path("data/")
@@ -68,11 +72,39 @@ class SparkDataConsoleApp:
         with Progress(SpinnerColumn(), TextColumn("[green]Creating Spark session...[/green]")) as progress:
             task = progress.add_task("", total=None)
             try:
-                self.session = create_spark_session(self.app_name)
+                self.session = create_spark_session(self.app_name, log_level="ERROR")
                 progress.update(task, description="[green]Spark session created successfully![/green]")
             except Exception as e:
                 self.console.print(f"[bold red]Error creating Spark session:[/bold red] {str(e)}")
                 sys.exit(1)
+        
+        # Check for a single CSV file in data/raw/
+        raw_data_dir = Path("data/raw/")
+        if raw_data_dir.exists():
+            csv_files = list(raw_data_dir.glob('*.csv'))
+            if len(csv_files) == 1:
+                file_path = csv_files[0]
+                self.console.print(f"\n[yellow]Found single CSV file:[/yellow] {file_path.name}")
+                if Confirm.ask("Would you like to load this file automatically?", default=True):
+                    with Progress(SpinnerColumn(), TextColumn("[green]Loading data...[/green]")) as progress:
+                        task = progress.add_task("", total=None)
+                        self.df = self.session.read.csv(str(file_path), header=True, inferSchema=True)
+                        row_count = self.df.count()
+                        progress.update(task, description=f"[green]Loaded {row_count} rows successfully![/green]")
+                        
+                    self.console.print(f"[bold green]Loaded:[/bold green] {file_path.name}")
+                    self._display_dataframe(self.df, 5)
+                    
+                    # # Show schema information
+                    # self.console.print("\n[bold cyan]Schema Information:[/bold cyan]")
+                    # schema_table = Table(show_header=True, header_style="bold magenta", box=box.ROUNDED)
+                    # schema_table.add_column("Column Name", style="green")
+                    # schema_table.add_column("Data Type", style="blue")
+                    
+                    # for field in self.df.schema.fields:
+                    #     schema_table.add_row(field.name, str(field.dataType))
+                        
+                    # self.console.print(schema_table)
         
         self.run_main_loop()
     
@@ -136,9 +168,29 @@ class SparkDataConsoleApp:
         """Load data from a CSV file."""
         self.console.print(Panel("[bold]Load Data[/bold]", border_style="yellow"))
         try:
-            csv_files = list(self.data_dir.rglob('*.csv'))
+            # First, find all CSV files and directories that might contain CSV files
+            csv_files = []
+            processed_dirs = []
             
-            if not csv_files:
+            # Handle data/processed directory specially
+            processed_dir = self.data_dir / "processed"
+            if processed_dir.exists():
+                # Look for directories containing CSV files in processed/
+                for item in processed_dir.iterdir():
+                    if item.is_dir() and not item.name.startswith('.'):
+                        # Check if directory contains CSV files (typical for Spark partitioned output)
+                        has_csv = any(f.suffix == '.csv' and not f.name.startswith('.') for f in item.iterdir())
+                        if has_csv:
+                            processed_dirs.append(item)
+            
+            # Find CSV files in all directories except processed/
+            for item in self.data_dir.rglob('*.csv'):
+                # Skip files in processed/ directory and hidden files
+                if not item.is_file() or item.name.startswith('.') or 'processed' in item.parts:
+                    continue
+                csv_files.append(item)
+            
+            if not csv_files and not processed_dirs:
                 self.console.print(f"[bold red]No CSV files found in {self.data_dir} directory[/bold red]")
                 if Confirm.ask("Would you like to specify a different data directory?"):
                     dir_path = Prompt.ask("Enter path to data directory")
@@ -146,30 +198,65 @@ class SparkDataConsoleApp:
                     self.load_data()  # Retry with new directory
                 return
                 
+            # Create table for display
             table = Table(show_header=True, header_style="bold magenta", box=box.ROUNDED)
             table.add_column("#", style="dim", width=6)
-            table.add_column("Filename", style="green")
-            table.add_column("Size", style="blue")
-            table.add_column("Last Modified", style="cyan")
+            table.add_column("Type", style="yellow")
+            table.add_column("Location", style="blue")
+            table.add_column("Name", style="green")
+            table.add_column("Size", style="cyan")
+            table.add_column("Last Modified", style="magenta")
             
+            # Add regular CSV files
             for i, file in enumerate(csv_files, 1):
                 size = f"{file.stat().st_size / 1024:.1f} KB"
                 modified = datetime.fromtimestamp(file.stat().st_mtime).strftime('%Y-%m-%d %H:%M')
-                table.add_row(str(i), file.name, size, modified)
+                # Get relative path from data directory
+                rel_path = file.relative_to(self.data_dir)
+                location = str(rel_path.parent)
+                if location == '.':
+                    location = 'data'
+                table.add_row(str(i), "File", location, file.name, size, modified)
+            
+            # Add directories containing partitioned CSVs
+            for i, dir_path in enumerate(processed_dirs, len(csv_files) + 1):
+                # Calculate total size of CSV files in directory
+                total_size = sum(f.stat().st_size for f in dir_path.rglob('*.csv') if not f.name.startswith('.'))
+                size = f"{total_size / 1024:.1f} KB"
+                modified = datetime.fromtimestamp(dir_path.stat().st_mtime).strftime('%Y-%m-%d %H:%M')
+                table.add_row(str(i), "Directory", "processed", dir_path.name, size, modified)
                 
             self.console.print(table)
                 
-            choice = Prompt.ask("Select file number (or 'c' to cancel)")
+            choice = Prompt.ask("Select number (or 'c' to cancel)")
             if choice.lower() == 'c':
                 return
                 
             try:
                 index = int(choice) - 1
-                file_path = csv_files[index]
+                total_items = len(csv_files) + len(processed_dirs)
+                
+                if index < 0 or index >= total_items:
+                    raise ValueError("Invalid selection number")
+                
+                # Determine if selection is a file or directory
+                if index < len(csv_files):
+                    file_path = csv_files[index]
+                    is_directory = False
+                else:
+                    file_path = processed_dirs[index - len(csv_files)]
+                    is_directory = True
                 
                 with Progress(SpinnerColumn(), TextColumn("[green]Loading data...[/green]")) as progress:
                     task = progress.add_task("", total=None)
-                    self.df = self.session.read.csv(str(file_path), header=True, inferSchema=True)
+                    
+                    if is_directory:
+                        # For directories, read all CSV files as one DataFrame
+                        self.df = self.session.read.csv(str(file_path), header=True, inferSchema=True)
+                    else:
+                        # For single files, read normally
+                        self.df = self.session.read.csv(str(file_path), header=True, inferSchema=True)
+                    
                     row_count = self.df.count()
                     progress.update(task, description=f"[green]Loaded {row_count} rows successfully![/green]")
                     
@@ -192,81 +279,481 @@ class SparkDataConsoleApp:
         except Exception as e:
             self.console.print(f"[bold red]Error:[/bold red] {str(e)}")
     
+    def _display_enrollment_stats(self, df: DataFrame, authorities: List[str]):
+        """
+        Display enrollment statistics by year for selected local authorities.
+        
+        Args:
+            df: PySpark DataFrame containing the data
+            authorities: List of selected local authority names
+        """
+        # Create pivot table of enrollments by LA and year
+        pivot_df = df.groupBy("la_name").pivot("time_period").agg(
+            F.sum("enrolments").alias("enrollments")
+        ).orderBy("la_name")
+        
+        # Get all years in order
+        years = sorted([col for col in pivot_df.columns if col != "la_name"])
+        
+        # Create formatted table
+        table = Table(
+            show_header=True,
+            header_style="bold magenta",
+            box=box.ROUNDED,
+            title="Pupil Enrollments by Local Authority and Year"
+        )
+        
+        # Add columns
+        table.add_column("Local Authority", style="green")
+        for year in years:
+            table.add_column(str(year), justify="right", style="blue")
+        
+        # Add total column
+        table.add_column("Total", justify="right", style="yellow")
+        
+        # Collect data and format rows
+        rows = pivot_df.collect()
+        for row in rows:
+            if row["la_name"] in authorities:
+                values = [row["la_name"]]
+                total = 0
+                for year in years:
+                    value = row[year] if row[year] is not None else 0
+                    total += value
+                    values.append(f"{value:,}")
+                values.append(f"{total:,}")
+                table.add_row(*values)
+        
+        self.console.print(table)
+        
+        # Show summary statistics
+        summary = Table(
+            show_header=True,
+            header_style="bold cyan",
+            box=box.ROUNDED,
+            title="Summary Statistics"
+        )
+        summary.add_column("Year", style="green")
+        summary.add_column("Total Enrollments", justify="right", style="blue")
+        summary.add_column("Average per LA", justify="right", style="yellow")
+        
+        for year in years:
+            total = sum(row[year] if row[year] is not None else 0 
+                       for row in rows if row["la_name"] in authorities)
+            avg = total / len(authorities)
+            summary.add_row(
+                str(year),
+                f"{total:,}",
+                f"{avg:,.0f}"
+            )
+        
+        self.console.print("\n")
+        self.console.print(summary)
+
+    def _display_absence_stats(self, df: DataFrame, school_type: str):
+        """
+        Display authorized absence statistics for the selected school type by year.
+        
+        Args:
+            df: PySpark DataFrame containing the data
+            school_type: Selected school type
+        """
+        # Get available years
+        years = sorted([row[0] for row in df.select("time_period").distinct().collect()])
+        
+        # Create table for displaying statistics
+        table = Table(
+            show_header=True,
+            header_style="bold magenta",
+            box=box.ROUNDED,
+            title=f"Authorized Absences Summary for {school_type}"
+        )
+        
+        table.add_column("Year", style="green")
+        table.add_column("Total Authorized Absences", justify="right", style="blue")
+        table.add_column("Total Enrollments", justify="right", style="blue")
+        table.add_column("Absences per Student", justify="right", style="yellow")
+        
+        # Calculate statistics for each year
+        for year in years:
+            year_data = df.filter(F.col("time_period") == year)
+            
+            # Calculate totals
+            stats = year_data.agg(
+                F.sum("sess_authorised").alias("total_absences"),
+                F.sum("enrolments").alias("total_enrollments")
+            ).collect()[0]
+            
+            total_absences = stats["total_absences"] or 0
+            total_enrollments = stats["total_enrollments"] or 0
+            
+            # Calculate absences per student
+            absences_per_student = (
+                total_absences / total_enrollments if total_enrollments > 0 else 0
+            )
+            
+            table.add_row(
+                str(year),
+                f"{total_absences:,}",
+                f"{total_enrollments:,}",
+                f"{absences_per_student:.2f}"
+            )
+        
+        self.console.print(table)
+        
+        # Ask if user wants to see detailed breakdown
+        if Confirm.ask("\nWould you like to see a detailed breakdown of absence types?"):
+            # Let user select a year
+            year_table = Table(show_header=True, header_style="bold magenta")
+            year_table.add_column("#", style="dim", width=6)
+            year_table.add_column("Year", style="green")
+            
+            for i, year in enumerate(years, 1):
+                year_table.add_row(str(i), str(year))
+                
+            self.console.print("\nSelect a year for detailed breakdown:")
+            self.console.print(year_table)
+            
+            year_choice = Prompt.ask("Enter year number")
+            try:
+                selected_year = years[int(year_choice) - 1]
+                
+                # Define absence types and their descriptions
+                absence_types = {
+                    "sess_auth_appointments": "Medical appointments",
+                    "sess_auth_holiday": "Authorised holiday",
+                    "sess_auth_illness": "Illness",
+                    "sess_auth_other": "Other authorised",
+                    "sess_auth_religious": "Religious observance",
+                    "sess_auth_study": "Study leave",
+                    "sess_auth_traveller": "Traveller"
+                }
+                
+                # Filter data for selected year
+                year_data = df.filter(F.col("time_period") == selected_year)
+                
+                # Create detailed breakdown table
+                detail_table = Table(
+                    show_header=True,
+                    header_style="bold magenta",
+                    box=box.ROUNDED,
+                    title=f"Detailed Absence Breakdown for {school_type} in {selected_year}"
+                )
+                
+                detail_table.add_column("Absence Type", style="green")
+                detail_table.add_column("Total Sessions", justify="right", style="blue")
+                detail_table.add_column("% of All Authorized", justify="right", style="yellow")
+                detail_table.add_column("Sessions per Student", justify="right", style="cyan")
+                
+                # Calculate totals for percentage calculation
+                totals = year_data.agg(
+                    F.sum("sess_authorised").alias("total_auth"),
+                    F.sum("enrolments").alias("total_enrol")
+                ).collect()[0]
+                
+                total_authorized = totals["total_auth"] or 0
+                total_enrollments = totals["total_enrol"] or 0
+                
+                # Calculate statistics for each absence type
+                for col, description in absence_types.items():
+                    stats = year_data.agg(F.sum(col).alias("total")).collect()[0]
+                    total = stats["total"] or 0
+                    
+                    percentage = (
+                        (total / total_authorized * 100)
+                        if total_authorized > 0 else 0
+                    )
+                    
+                    per_student = (
+                        total / total_enrollments
+                        if total_enrollments > 0 else 0
+                    )
+                    
+                    detail_table.add_row(
+                        description,
+                        f"{total:,}",
+                        f"{percentage:.1f}%",
+                        f"{per_student:.2f}"
+                    )
+                
+                self.console.print("\n")
+                self.console.print(detail_table)
+                
+                # Add summary note
+                self.console.print(
+                    f"\n[dim]Total students: {total_enrollments:,} | "
+                    f"Total authorized absences: {total_authorized:,}[/dim]"
+                )
+                
+            except (ValueError, IndexError):
+                self.console.print("[bold red]Invalid year selection[/bold red]")
+
+    def _display_unauth_absence_stats(self, df: DataFrame, breakdown_by: str, year: str):
+        """
+        Display unauthorized absence statistics broken down by region or local authority.
+        
+        Args:
+            df: PySpark DataFrame containing the data
+            breakdown_by: Either 'region_name' or 'la_name'
+            year: Selected year
+        """
+        # Filter for selected year
+        year_data = df.filter(F.col("time_period") == year)
+        
+        # Group by region/LA and calculate statistics
+        stats = (year_data.groupBy(breakdown_by)
+                .agg(
+                    F.sum("sess_unauthorised").alias("total_unauth"),
+                    F.sum("enrolments").alias("total_students")
+                )
+                .orderBy(breakdown_by))
+        
+        # Calculate overall totals for percentages
+        totals = stats.agg(
+            F.sum("total_unauth").alias("total_unauth"),
+            F.sum("total_students").alias("total_students")
+        ).collect()[0]
+        
+        overall_unauth = totals["total_unauth"] or 0
+        overall_students = totals["total_students"] or 0
+        
+        # Create table for displaying statistics
+        title = "Regions" if breakdown_by == "region_name" else "Local Authorities"
+        table = Table(
+            show_header=True,
+            header_style="bold magenta",
+            box=box.ROUNDED,
+            title=f"Unauthorized Absences by {title} in {year}"
+        )
+        
+        table.add_column(title.rstrip('s'), style="green")
+        table.add_column("Total Unauthorized", justify="right", style="blue")
+        table.add_column("Total Students", justify="right", style="blue")
+        table.add_column("% of All Unauthorized", justify="right", style="yellow")
+        table.add_column("Sessions per Student", justify="right", style="cyan")
+        
+        # Add rows
+        for row in stats.collect():
+            area = row[breakdown_by]
+            unauth = row["total_unauth"] or 0
+            students = row["total_students"] or 0
+            
+            percentage = (
+                (unauth / overall_unauth * 100)
+                if overall_unauth > 0 else 0
+            )
+            
+            per_student = (
+                unauth / students
+                if students > 0 else 0
+            )
+            
+            table.add_row(
+                str(area),
+                f"{unauth:,}",
+                f"{students:,}",
+                f"{percentage:.1f}%",
+                f"{per_student:.2f}"
+            )
+        
+        self.console.print(table)
+        
+        # Show summary
+        self.console.print(
+            f"\n[dim]Total unauthorized absences: {overall_unauth:,} | "
+            f"Total students: {overall_students:,} | "
+            f"Overall sessions per student: {(overall_unauth/overall_students if overall_students > 0 else 0):.2f}[/dim]"
+        )
+
     def query_data(self):
-        """Query the dataframe by column."""
+        """Query the dataframe by local authority or school type."""
         if self.df is None:
             self.console.print("[bold red]No data loaded. Please load data first.[/bold red]")
             return
             
         self.console.print(Panel("[bold]Query Data[/bold]", border_style="yellow"))
         
-        # Display all available columns
-        table = Table(show_header=True, header_style="bold magenta", box=box.ROUNDED)
-        table.add_column("#", style="dim", width=6)
-        table.add_column("Column", style="green")
+        # Display query options
+        query_table = Table(show_header=True, header_style="bold magenta", box=box.ROUNDED)
+        query_table.add_column("#", style="dim", width=6)
+        query_table.add_column("Query Type", style="green")
         
-        for i, col in enumerate(self.df.columns, 1):
-            table.add_row(str(i), col)
+        query_options = ["Local Authority", "School Type", "Unauthorized Absences"]
+        for i, option in enumerate(query_options, 1):
+            query_table.add_row(str(i), option)
+            
+        self.console.print(query_table)
         
-        self.console.print(table)
+        choice = Prompt.ask("Select query type", choices=["1", "2", "3"])
         
-        choice = Prompt.ask("Select column number")
         try:
-            col_index = int(choice) - 1
-            if col_index < 0 or col_index >= len(self.df.columns):
-                raise ValueError("Invalid column index")
+            if choice == "1":  # Local Authority
+                column = "la_name"
+                title = "Local Authority"
                 
-            column = self.df.columns[col_index]
-            
-            with Progress(SpinnerColumn(), TextColumn("[green]Getting values...[/green]")) as progress:
-                task = progress.add_task("", total=None)
-                values = [row[0] for row in self.df.select(column).distinct().collect()]
-            
-            values_table = Table(show_header=True, header_style="bold magenta", box=box.ROUNDED)
-            values_table.add_column("#", style="dim", width=6)
-            values_table.add_column(f"{column} Values", style="green")
-            values_table.add_column("Count", style="blue")
-            
-            # Count occurrences of each value
-            value_counts = self.df.groupBy(column).count().collect()
-            value_count_dict = {row[0]: row[1] for row in value_counts}
-            
-            for i, val in enumerate(values, 1):
-                count = value_count_dict.get(val, 0)
-                values_table.add_row(str(i), str(val), str(count))
+                with Progress(SpinnerColumn(), TextColumn("[green]Getting values...[/green]")) as progress:
+                    task = progress.add_task("", total=None)
+                    values = [row[0] for row in self.df.select(column).distinct().orderBy(column).collect()]
                 
-            self.console.print(values_table)
+                values_table = Table(show_header=True, header_style="bold magenta", box=box.ROUNDED)
+                values_table.add_column("#", style="dim", width=6)
+                values_table.add_column(f"{title}", style="green")
+                values_table.add_column("Count", style="blue")
                 
-            val_choice = Prompt.ask("Select value number to filter by (or 'a' for all)")
+                # Count occurrences of each value
+                value_counts = self.df.groupBy(column).count().orderBy(column).collect()
+                value_count_dict = {row[0]: row[1] for row in value_counts}
+                
+                for i, val in enumerate(values, 1):
+                    count = value_count_dict.get(val, 0)
+                    values_table.add_row(str(i), str(val), str(count))
+                    
+                self.console.print(values_table)
+                
+                # Allow multiple selections for local authorities
+                selected_authorities = []
+                while True:
+                    val_choice = Prompt.ask(
+                        "Select value number to add (or 'a' for all, 'd' when done, 'c' to cancel)"
+                    )
+                    
+                    if val_choice.lower() == 'c':
+                        return
+                    elif val_choice.lower() == 'a':
+                        selected_authorities = values
+                        break
+                    elif val_choice.lower() == 'd':
+                        if not selected_authorities:
+                            self.console.print("[yellow]Please select at least one local authority[/yellow]")
+                            continue
+                        break
+                    else:
+                        try:
+                            index = int(val_choice) - 1
+                            if 0 <= index < len(values):
+                                authority = values[index]
+                                if authority not in selected_authorities:
+                                    selected_authorities.append(authority)
+                                    self.console.print(f"[green]Added: {authority}[/green]")
+                                else:
+                                    self.console.print(f"[yellow]{authority} already selected[/yellow]")
+                            else:
+                                self.console.print("[red]Invalid selection number[/red]")
+                        except ValueError:
+                            self.console.print("[red]Invalid input[/red]")
+                
+                # Filter data for selected authorities
+                result = self.df.filter(F.col(column).isin(selected_authorities))
+                
+                # Display enrollment statistics
+                self._display_enrollment_stats(result, selected_authorities)
+                
+                self.last_query_result = result
+                
+                # Ask if user wants to save this query result
+                if Confirm.ask("Would you like to save this query result?"):
+                    self.df = result
+                    self.console.print("[bold green]Query result saved as current dataframe[/bold green]")
+                
+            elif choice == "2":  # School Type
+                column = "school_type"
+                title = "School Type"
+                
+                with Progress(SpinnerColumn(), TextColumn("[green]Getting values...[/green]")) as progress:
+                    task = progress.add_task("", total=None)
+                    values = [row[0] for row in self.df.select(column).distinct().orderBy(column).collect()]
+                
+                values_table = Table(show_header=True, header_style="bold magenta", box=box.ROUNDED)
+                values_table.add_column("#", style="dim", width=6)
+                values_table.add_column(f"{title}", style="green")
+                values_table.add_column("Count", style="blue")
+                
+                # Count occurrences of each value
+                value_counts = self.df.groupBy(column).count().orderBy(column).collect()
+                value_count_dict = {row[0]: row[1] for row in value_counts}
+                
+                for i, val in enumerate(values, 1):
+                    count = value_count_dict.get(val, 0)
+                    values_table.add_row(str(i), str(val), str(count))
+                    
+                self.console.print(values_table)
+                    
+                val_choice = Prompt.ask("Select value number to filter by (or 'a' for all)")
+                
+                if val_choice.lower() == 'a':
+                    self.console.print(f"[bold green]Showing all values for {title}:[/bold green]")
+                    result = self.df
+                    school_type = "All School Types"
+                else:
+                    try:
+                        index = int(val_choice) - 1
+                        selected_val = values[index]
+                        
+                        with Progress(SpinnerColumn(), TextColumn("[green]Filtering data...[/green]")) as progress:
+                            task = progress.add_task("", total=None)
+                            result = self.df.filter(self.df[column] == selected_val)
+                        
+                        self.console.print(f"[bold green]Results for {title} = {selected_val}:[/bold green]")
+                        school_type = selected_val
+                        
+                    except (ValueError, IndexError):
+                        self.console.print("[bold red]Invalid selection[/bold red]")
+                        return
+                
+                # Display absence statistics
+                self._display_absence_stats(result, school_type)
+                
+                self.last_query_result = result
+                
+                # Ask if user wants to save this query result
+                if Confirm.ask("Would you like to save this query result?"):
+                    self.df = result
+                    self.console.print("[bold green]Query result saved as current dataframe[/bold green]")
             
-            if val_choice.lower() == 'a':
-                self.console.print(f"[bold green]Showing all values for {column}:[/bold green]")
-                result = self.df
-            else:
+            else:  # Unauthorized Absences
+                # First, let user select a year
+                years = sorted([row[0] for row in self.df.select("time_period").distinct().collect()])
+                
+                year_table = Table(show_header=True, header_style="bold magenta")
+                year_table.add_column("#", style="dim", width=6)
+                year_table.add_column("Year", style="green")
+                
+                for i, year in enumerate(years, 1):
+                    year_table.add_row(str(i), str(year))
+                    
+                self.console.print("\nSelect a year for unauthorized absence analysis:")
+                self.console.print(year_table)
+                
+                year_choice = Prompt.ask("Enter year number")
                 try:
-                    index = int(val_choice) - 1
-                    selected_val = values[index]
+                    selected_year = years[int(year_choice) - 1]
                     
-                    with Progress(SpinnerColumn(), TextColumn("[green]Filtering data...[/green]")) as progress:
-                        task = progress.add_task("", total=None)
-                        result = self.df.filter(self.df[column] == selected_val)
+                    # Now let user choose breakdown type
+                    breakdown_table = Table(show_header=True, header_style="bold magenta")
+                    breakdown_table.add_column("#", style="dim", width=6)
+                    breakdown_table.add_column("Breakdown By", style="green")
                     
-                    self.console.print(f"[bold green]Results for {column} = {selected_val}:[/bold green]")
+                    breakdown_options = ["Region", "Local Authority"]
+                    for i, option in enumerate(breakdown_options, 1):
+                        breakdown_table.add_row(str(i), option)
+                    
+                    self.console.print("\nSelect how to break down the data:")
+                    self.console.print(breakdown_table)
+                    
+                    breakdown_choice = Prompt.ask("Enter choice", choices=["1", "2"])
+                    
+                    # Set column to group by
+                    breakdown_col = "region_name" if breakdown_choice == "1" else "la_name"
+                    
+                    # Display statistics
+                    self._display_unauth_absence_stats(self.df, breakdown_col, selected_year)
                     
                 except (ValueError, IndexError):
                     self.console.print("[bold red]Invalid selection[/bold red]")
                     return
             
-            self._display_dataframe(result, 10)
-            self.last_query_result = result
-            
-            # Ask if user wants to save this query result
-            if Confirm.ask("Would you like to save this query result?"):
-                self.df = result
-                self.console.print("[bold green]Query result saved as current dataframe[/bold green]")
-            
-        except (ValueError, IndexError) as e:
-            self.console.print(f"[bold red]Invalid selection: {str(e)}[/bold red]")
+        except Exception as e:
+            self.console.print(f"[bold red]Error during query:[/bold red] {str(e)}")
     
     def visualize_data(self):
         """Visualize data using matplotlib."""
@@ -346,13 +833,15 @@ class SparkDataConsoleApp:
             
         self.console.print(Panel("[bold]Filter Data[/bold]", border_style="yellow"))
         
-        # Display column information
+        # Display column information for first 20 columns only
         col_table = Table(show_header=True, header_style="bold magenta", box=box.ROUNDED)
         col_table.add_column("#", style="dim", width=6)
         col_table.add_column("Column", style="green")
         col_table.add_column("Data Type", style="blue")
         
-        for i, field in enumerate(self.df.schema.fields, 1):
+        # Get first 20 columns
+        fields = self.df.schema.fields[:20]  # Only first 20 columns
+        for i, field in enumerate(fields, 1):
             col_table.add_row(str(i), field.name, str(field.dataType))
             
         self.console.print(col_table)
@@ -376,11 +865,11 @@ class SparkDataConsoleApp:
         self.console.print(filter_table)
         
         try:
-            col_choice = Prompt.ask("Select column to filter")
+            col_choice = Prompt.ask("Select column to filter (1-20)")
             col_index = int(col_choice) - 1
             
-            if col_index < 0 or col_index >= len(self.df.columns):
-                raise ValueError("Invalid column selection")
+            if col_index < 0 or col_index >= 20:  # Only allow first 20 columns
+                raise ValueError("Invalid column selection. Please choose a number between 1 and 20.")
                 
             col_name = self.df.columns[col_index]
             
@@ -441,6 +930,17 @@ class SparkDataConsoleApp:
         try:
             save_path = Path(path) / save_name
             
+            # Show info about partitioned output
+            self.console.print("\n[bold yellow]Note about saving:[/bold yellow]")
+            if file_format == "csv":
+                self.console.print(
+                    "The data will be saved in a directory named after your filename. "
+                    "This directory will contain:\n"
+                    "- A partitioned CSV file (part-00000-*.csv)\n"
+                    "- A _SUCCESS file indicating successful save\n"
+                    "You can load this data later by selecting the directory when loading."
+                )
+            
             with Progress(SpinnerColumn(), TextColumn("[green]Saving data...[/green]")) as progress:
                 task = progress.add_task("", total=None)
                 
@@ -499,7 +999,7 @@ class SparkDataConsoleApp:
         
         self.console.print(Panel("[bold blue]Goodbye![/bold blue]", border_style="green"))
     
-    def _display_dataframe(self, df: DataFrame, num_rows: int = 5):
+    def _display_dataframe(self, df: DataFrame, num_rows: int = 5, num_cols: int = 6):
         """
         Display dataframe as a Rich table.
         
@@ -514,7 +1014,7 @@ class SparkDataConsoleApp:
         
         # Add columns (limit to 10 if more exist)
         fields = schema.fields
-        max_cols = 10
+        max_cols = num_cols
         total_cols = len(fields)
         display_fields = fields[:max_cols] if total_cols > max_cols else fields
         
