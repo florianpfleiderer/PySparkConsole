@@ -1,16 +1,12 @@
 # Created on Wed Feb 05 2025 by 240030614
-# Copyright (c) 2025 University of St. Andrews
 """
-Textual app for PySpark data manipulation, styled similarly to Harlequin.
-
-Place this file (app.py) in the same directory as textual.css.
-Some versions of Textual auto-load textual.css; if not, see "Manual CSS Loading" below.
+PySpark data manipulation.
 """
 
 from __future__ import annotations
 from pathlib import Path
 import argparse
-import os
+# import os
 import sys
 import logging
 from typing import Optional, List, Dict, Any
@@ -77,34 +73,9 @@ class SparkDataConsoleApp:
             except Exception as e:
                 self.console.print(f"[bold red]Error creating Spark session:[/bold red] {str(e)}")
                 sys.exit(1)
-        
-        # Check for a single CSV file in data/raw/
-        raw_data_dir = Path("data/raw/")
-        if raw_data_dir.exists():
-            csv_files = list(raw_data_dir.glob('*.csv'))
-            if len(csv_files) == 1:
-                file_path = csv_files[0]
-                self.console.print(f"\n[yellow]Found single CSV file:[/yellow] {file_path.name}")
-                if Confirm.ask("Would you like to load this file automatically?", default=True):
-                    with Progress(SpinnerColumn(), TextColumn("[green]Loading data...[/green]")) as progress:
-                        task = progress.add_task("", total=None)
-                        self.df = self.session.read.csv(str(file_path), header=True, inferSchema=True)
-                        row_count = self.df.count()
-                        progress.update(task, description=f"[green]Loaded {row_count} rows successfully![/green]")
-                        
-                    self.console.print(f"[bold green]Loaded:[/bold green] {file_path.name}")
-                    self._display_dataframe(self.df, 5)
-                    
-                    # # Show schema information
-                    # self.console.print("\n[bold cyan]Schema Information:[/bold cyan]")
-                    # schema_table = Table(show_header=True, header_style="bold magenta", box=box.ROUNDED)
-                    # schema_table.add_column("Column Name", style="green")
-                    # schema_table.add_column("Data Type", style="blue")
-                    
-                    # for field in self.df.schema.fields:
-                    #     schema_table.add_row(field.name, str(field.dataType))
-                        
-                    # self.console.print(schema_table)
+
+        # Immediately prompt to load data
+        self.load_data()
         
         self.run_main_loop()
     
@@ -117,22 +88,22 @@ class SparkDataConsoleApp:
             menu = """
 [bold cyan]Available commands:[/bold cyan]
 [yellow]l[/yellow] - Load data
-[yellow]/[/yellow] - Query data
+[yellow]q[/yellow] - Query data
 [yellow]v[/yellow] - Visualize data
 [yellow]f[/yellow] - Filter data
 [yellow]s[/yellow] - Save data
 [yellow]h[/yellow] - Help
-[yellow]q[/yellow] - Quit
+[yellow]x[/yellow] - Quit
             """
             self.console.print(Panel(menu, title="Menu", border_style="blue"))
             
-            choice = Prompt.ask("Enter command", choices=["l", "/", "v", "f", "s", "h", "q"], show_choices=False)
+            choice = Prompt.ask("Enter command", choices=["l", "q", "v", "f", "s", "h", "x"], show_choices=False)
             self.command_history.append(choice)
             
             try:
                 if choice == 'l':
                     self.load_data()
-                elif choice == '/':
+                elif choice == 'q':
                     self.query_data()
                 elif choice == 'v':
                     self.visualize_data()
@@ -142,12 +113,12 @@ class SparkDataConsoleApp:
                     self.save_data()
                 elif choice == 'h':
                     self.show_help()
-                elif choice == 'q':
+                elif choice == 'x':
                     self.quit()
                     break
             except Exception as e:
                 self.console.print(f"[bold red]Error:[/bold red] {str(e)}")
-                self.console.print("[dim]Use 'h' for help or 'q' to quit[/dim]")
+                self.console.print("[dim]Use 'h' for help or 'x' to quit[/dim]")
                 
             # Add a visual separator between commands
             self.console.print("─" * self.console.width)
@@ -263,16 +234,16 @@ class SparkDataConsoleApp:
                 self.console.print(f"[bold green]Loaded:[/bold green] {file_path.name}")
                 self._display_dataframe(self.df, 5)
                 
-                # Show schema information
-                self.console.print("\n[bold cyan]Schema Information:[/bold cyan]")
-                schema_table = Table(show_header=True, header_style="bold magenta", box=box.ROUNDED)
-                schema_table.add_column("Column Name", style="green")
-                schema_table.add_column("Data Type", style="blue")
+                # # Show schema information
+                # self.console.print("\n[bold cyan]Schema Information:[/bold cyan]")
+                # schema_table = Table(show_header=True, header_style="bold magenta", box=box.ROUNDED)
+                # schema_table.add_column("Column Name", style="green")
+                # schema_table.add_column("Data Type", style="blue")
                 
-                for field in self.df.schema.fields:
-                    schema_table.add_row(field.name, str(field.dataType))
+                # for field in self.df.schema.fields:
+                #     schema_table.add_row(field.name, str(field.dataType))
                     
-                self.console.print(schema_table)
+                # self.console.print(schema_table)
                 
             except (ValueError, IndexError):
                 self.console.print("[bold red]Invalid selection[/bold red]")
@@ -565,6 +536,141 @@ class SparkDataConsoleApp:
             f"Overall sessions per student: {(overall_unauth/overall_students if overall_students > 0 else 0):.2f}[/dim]"
         )
 
+    def _compare_local_authorities(self, df: DataFrame, auth1: str, auth2: str, year: str):
+        """
+        Compare two local authorities for a given year across multiple metrics.
+        
+        Args:
+            df: PySpark DataFrame containing the data
+            auth1: First local authority name
+            auth2: Second local authority name
+            year: Selected year for comparison
+        """
+        try:
+            # Filter data for the selected year and authorities
+            comparison_data = df.filter(
+                (F.col("time_period") == year) & 
+                (F.col("la_name").isin([auth1, auth2]))
+            )
+            
+            # Check if we have data for both authorities
+            auth_counts = comparison_data.groupBy("la_name").count().collect()
+            auth_count_dict = {row["la_name"]: row["count"] for row in auth_counts}
+            
+            missing_auths = []
+            if auth1 not in auth_count_dict:
+                missing_auths.append(auth1)
+            if auth2 not in auth_count_dict:
+                missing_auths.append(auth2)
+                
+            if missing_auths:
+                self.console.print(f"[bold red]No data found for the following authorities in {year}:[/bold red]")
+                for auth in missing_auths:
+                    self.console.print(f"• {auth}")
+                return
+            
+            # Create comparison table
+            table = Table(
+                show_header=True,
+                header_style="bold magenta",
+                box=box.ROUNDED,
+                title=f"Comparison of {auth1} vs {auth2} in {year}"
+            )
+            
+            table.add_column("Metric", style="green")
+            table.add_column(auth1, justify="right", style="blue")
+            table.add_column(auth2, justify="right", style="yellow")
+            table.add_column("Difference", justify="right", style="cyan")
+            
+            # Calculate metrics for comparison
+            metrics = comparison_data.groupBy("la_name").agg(
+                F.sum("enrolments").alias("total_enrolments"),
+                F.sum("sess_authorised").alias("total_authorised"),
+                F.sum("sess_unauthorised").alias("total_unauthorised"),
+                F.sum("sess_possible").alias("total_possible")
+            ).collect()
+            
+            # Create a dictionary for easy access to metrics
+            metrics_dict = {row["la_name"]: row.asDict() for row in metrics}
+            
+            if not metrics_dict:
+                self.console.print(f"[bold red]No metrics data found for the selected authorities in {year}[/bold red]")
+                return
+                
+            if auth1 not in metrics_dict or auth2 not in metrics_dict:
+                self.console.print(f"[bold red]Missing metrics data for one or both authorities in {year}:[/bold red]")
+                if auth1 not in metrics_dict:
+                    self.console.print(f"• {auth1}")
+                if auth2 not in metrics_dict:
+                    self.console.print(f"• {auth2}")
+                return
+            
+            # Helper function to calculate percentage
+            def calc_percentage(part, whole):
+                return (part / whole * 100) if whole > 0 else 0
+            
+            # Add rows for each metric
+            metrics_to_compare = [
+                ("Total Enrolments", "total_enrolments", "{:,}"),
+                ("Total Authorised Absences", "total_authorised", "{:,}"),
+                ("Total Unauthorised Absences", "total_unauthorised", "{:,}"),
+                ("Total Possible Sessions", "total_possible", "{:,}")
+            ]
+            
+            for metric_name, metric_key, format_str in metrics_to_compare:
+                val1 = metrics_dict[auth1][metric_key]
+                val2 = metrics_dict[auth2][metric_key]
+                diff = val1 - val2
+                
+                table.add_row(
+                    metric_name,
+                    format_str.format(val1),
+                    format_str.format(val2),
+                    f"{format_str.format(abs(diff))} {'higher' if diff > 0 else 'lower'}"
+                )
+            
+            # Calculate percentage metrics
+            for auth in [auth1, auth2]:
+                metrics_dict[auth]["auth_absence_rate"] = calc_percentage(
+                    metrics_dict[auth]["total_authorised"], 
+                    metrics_dict[auth]["total_possible"]
+                )
+                metrics_dict[auth]["unauth_absence_rate"] = calc_percentage(
+                    metrics_dict[auth]["total_unauthorised"], 
+                    metrics_dict[auth]["total_possible"]
+                )
+                metrics_dict[auth]["total_absence_rate"] = (
+                    metrics_dict[auth]["auth_absence_rate"] + 
+                    metrics_dict[auth]["unauth_absence_rate"]
+                )
+            
+            percentage_metrics = [
+                ("Authorised Absence Rate", "auth_absence_rate"),
+                ("Unauthorised Absence Rate", "unauth_absence_rate"),
+                ("Total Absence Rate", "total_absence_rate")
+            ]
+            
+            for metric_name, metric_key in percentage_metrics:
+                val1 = metrics_dict[auth1][metric_key]
+                val2 = metrics_dict[auth2][metric_key]
+                diff = val1 - val2
+                
+                table.add_row(
+                    metric_name,
+                    f"{val1:.1f}%",
+                    f"{val2:.1f}%",
+                    f"{abs(diff):.1f}% {'higher' if diff > 0 else 'lower'}"
+                )
+            
+            self.console.print(table)
+            
+        except Exception as e:
+            self.console.print(f"[bold red]Error during comparison:[/bold red]")
+            self.console.print(f"[red]• Selected year: {year}[/red]")
+            self.console.print(f"[red]• First authority: {auth1}[/red]")
+            self.console.print(f"[red]• Second authority: {auth2}[/red]")
+            self.console.print(f"[red]• Error details: {str(e)}[/red]")
+
     def query_data(self):
         """Query the dataframe by local authority or school type."""
         if self.df is None:
@@ -595,66 +701,162 @@ class SparkDataConsoleApp:
                     task = progress.add_task("", total=None)
                     values = [row[0] for row in self.df.select(column).distinct().orderBy(column).collect()]
                 
-                values_table = Table(show_header=True, header_style="bold magenta", box=box.ROUNDED)
-                values_table.add_column("#", style="dim", width=6)
-                values_table.add_column(f"{title}", style="green")
-                values_table.add_column("Count", style="blue")
+                # Ask user what type of analysis they want
+                analysis_table = Table(show_header=True, header_style="bold magenta", box=box.ROUNDED)
+                analysis_table.add_column("#", style="dim", width=6)
+                analysis_table.add_column("Analysis Type", style="green")
                 
-                # Count occurrences of each value
-                value_counts = self.df.groupBy(column).count().orderBy(column).collect()
-                value_count_dict = {row[0]: row[1] for row in value_counts}
-                
-                for i, val in enumerate(values, 1):
-                    count = value_count_dict.get(val, 0)
-                    values_table.add_row(str(i), str(val), str(count))
+                analysis_options = ["Enrollments by Year", "Compare Two Authorities"]
+                for i, option in enumerate(analysis_options, 1):
+                    analysis_table.add_row(str(i), option)
                     
-                self.console.print(values_table)
+                self.console.print("\nSelect analysis type:")
+                self.console.print(analysis_table)
                 
-                # Allow multiple selections for local authorities
-                selected_authorities = []
-                while True:
-                    val_choice = Prompt.ask(
-                        "Select value number to add (or 'a' for all, 'd' when done, 'c' to cancel)"
-                    )
+                analysis_choice = Prompt.ask("Enter choice", choices=["1", "2"])
+                
+                if analysis_choice == "1":  # Enrollments by Year
+                    values_table = Table(show_header=True, header_style="bold magenta", box=box.ROUNDED)
+                    values_table.add_column("#", style="dim", width=6)
+                    values_table.add_column(f"{title}", style="green")
+                    values_table.add_column("Count", style="blue")
                     
-                    if val_choice.lower() == 'c':
-                        return
-                    elif val_choice.lower() == 'a':
-                        selected_authorities = values
-                        break
-                    elif val_choice.lower() == 'd':
-                        if not selected_authorities:
-                            self.console.print("[yellow]Please select at least one local authority[/yellow]")
-                            continue
-                        break
-                    else:
-                        try:
-                            index = int(val_choice) - 1
-                            if 0 <= index < len(values):
-                                authority = values[index]
-                                if authority not in selected_authorities:
-                                    selected_authorities.append(authority)
-                                    self.console.print(f"[green]Added: {authority}[/green]")
+                    # Count occurrences of each value
+                    value_counts = self.df.groupBy(column).count().orderBy(column).collect()
+                    value_count_dict = {row[0]: row[1] for row in value_counts}
+                    
+                    for i, val in enumerate(values, 1):
+                        count = value_count_dict.get(val, 0)
+                        values_table.add_row(str(i), str(val), str(count))
+                        
+                    self.console.print(values_table)
+                    
+                    # Allow multiple selections for local authorities
+                    selected_authorities = []
+                    while True:
+                        val_choice = Prompt.ask(
+                            "Select value number to add (or 'a' for all, 'd' when done, 'c' to cancel)"
+                        )
+                        
+                        if val_choice.lower() == 'c':
+                            return
+                        elif val_choice.lower() == 'a':
+                            selected_authorities = values
+                            break
+                        elif val_choice.lower() == 'd':
+                            if not selected_authorities:
+                                self.console.print("[yellow]Please select at least one local authority[/yellow]")
+                                continue
+                            break
+                        else:
+                            try:
+                                index = int(val_choice) - 1
+                                if 0 <= index < len(values):
+                                    authority = values[index]
+                                    if authority not in selected_authorities:
+                                        selected_authorities.append(authority)
+                                        self.console.print(f"[green]Added: {authority}[/green]")
+                                    else:
+                                        self.console.print(f"[yellow]{authority} already selected[/yellow]")
                                 else:
-                                    self.console.print(f"[yellow]{authority} already selected[/yellow]")
+                                    self.console.print("[red]Invalid selection number[/red]")
+                            except ValueError:
+                                self.console.print("[red]Invalid input[/red]")
+                    
+                    # Filter data for selected authorities
+                    result = self.df.filter(F.col(column).isin(selected_authorities))
+                    
+                    # Display enrollment statistics
+                    self._display_enrollment_stats(result, selected_authorities)
+                    
+                    self.last_query_result = result
+                    
+                    # Ask if user wants to save this query result
+                    if Confirm.ask("Would you like to save this query result?"):
+                        self.df = result
+                        self.console.print("[bold green]Query result saved as current dataframe[/bold green]")
+                
+                else:  # Compare Two Authorities
+                    # Display available authorities
+                    values_table = Table(show_header=True, header_style="bold magenta", box=box.ROUNDED)
+                    values_table.add_column("#", style="dim", width=6)
+                    values_table.add_column(f"{title}", style="green")
+                    
+                    for i, val in enumerate(values, 1):
+                        values_table.add_row(str(i), str(val))
+                        
+                    self.console.print("\nSelect first local authority:")
+                    self.console.print(values_table)
+                    
+                    # Get first authority
+                    while True:
+                        val_choice1 = Prompt.ask("Enter number for first authority")
+                        try:
+                            index1 = int(val_choice1) - 1
+                            if 0 <= index1 < len(values):
+                                auth1 = values[index1]
+                                break
                             else:
                                 self.console.print("[red]Invalid selection number[/red]")
                         except ValueError:
                             self.console.print("[red]Invalid input[/red]")
-                
-                # Filter data for selected authorities
-                result = self.df.filter(F.col(column).isin(selected_authorities))
-                
-                # Display enrollment statistics
-                self._display_enrollment_stats(result, selected_authorities)
-                
-                self.last_query_result = result
-                
-                # Ask if user wants to save this query result
-                if Confirm.ask("Would you like to save this query result?"):
-                    self.df = result
-                    self.console.print("[bold green]Query result saved as current dataframe[/bold green]")
-                
+                    
+                    self.console.print("\nSelect second local authority:")
+                    self.console.print(values_table)
+                    
+                    # Get second authority
+                    while True:
+                        val_choice2 = Prompt.ask("Enter number for second authority")
+                        try:
+                            index2 = int(val_choice2) - 1
+                            if 0 <= index2 < len(values):
+                                auth2 = values[index2]
+                                if auth2 != auth1:
+                                    break
+                                else:
+                                    self.console.print("[yellow]Please select a different authority[/yellow]")
+                            else:
+                                self.console.print("[red]Invalid selection number[/red]")
+                        except ValueError:
+                            self.console.print("[red]Invalid input[/red]")
+                    
+                    # Get available years
+                    years = sorted([str(row[0]) for row in self.df.select("time_period").distinct().collect()])
+                    
+                    year_table = Table(show_header=True, header_style="bold magenta")
+                    year_table.add_column("#", style="dim", width=6)
+                    year_table.add_column("Year", style="green")
+                    
+                    for i, year in enumerate(years, 1):
+                        year_table.add_row(str(i), str(year))
+                        
+                    self.console.print("\nSelect year for comparison:")
+                    self.console.print(year_table)
+                    
+                    # Get year selection
+                    while True:
+                        year_choice = Prompt.ask("Enter year number")
+                        try:
+                            index = int(year_choice) - 1
+                            if 0 <= index < len(years):
+                                selected_year = str(years[index])  # Ensure year is string
+                                self.console.print(f"[green]Selected year: {selected_year}[/green]")
+                                break
+                            else:
+                                self.console.print("[red]Invalid selection number[/red]")
+                        except ValueError:
+                            self.console.print("[red]Invalid input[/red]")
+                    
+                    # Display comparison
+                    try:
+                        self._compare_local_authorities(self.df, auth1, auth2, selected_year)
+                    except Exception as e:
+                        self.console.print(f"[bold red]Error during comparison:[/bold red]")
+                        self.console.print(f"[red]• Year: {selected_year}[/red]")
+                        self.console.print(f"[red]• First authority: {auth1}[/red]")
+                        self.console.print(f"[red]• Second authority: {auth2}[/red]")
+                        self.console.print(f"[red]• Error details: {str(e)}[/red]")
+            
             elif choice == "2":  # School Type
                 column = "school_type"
                 title = "School Type"
@@ -974,12 +1176,12 @@ class SparkDataConsoleApp:
 ## Available Commands
 
 * `l` - **Load data**: Load a CSV file into a Spark DataFrame
-* `/` - **Query data**: Filter data by column values
+* `q` - **Query data**: Filter data by column values
 * `v` - **Visualize data**: View basic statistics (advanced visualization coming soon)
 * `f` - **Filter data**: Apply custom filters to your data
 * `s` - **Save data**: Export data to various formats
 * `h` - **Help**: Show this help message
-* `q` - **Quit**: Exit the application
+* `x` - **Quit**: Exit the application
 
 ## Tips
 

@@ -1,5 +1,4 @@
 # Created on Wed Feb 05 2025 by 2400614
-# Copyright (c) 2025 University of St. Andrews
 """
 Initialize Spark session and configurations.
 """
@@ -37,13 +36,13 @@ def create_spark_session(app_name="MySpark", log_level="ERROR"):
     spark = (SparkSession.builder
             .master("local[*]")
             .appName(app_name)
-            .config("spark.driver.host", "localhost")
-            .config("spark.driver.bindAddress", "127.0.0.1")
+            # .config("spark.driver.host", "localhost")
+            # .config("spark.driver.bindAddress", "127.0.0.1")
             .config("spark.driver.extraJavaOptions", "-Djava.security.manager=allow")
-            .config("spark.executor.extraJavaOptions", "-Djava.security.manager=allow")
-            .config("spark.authenticate", "false")
-            .config("spark.ui.enabled", "false")
-            .config("spark.sql.session.timeZone", "UTC")
+            # .config("spark.executor.extraJavaOptions", "-Djava.security.manager=allow")
+            # .config("spark.authenticate", "false")
+            # .config("spark.ui.enabled", "false")
+            # .config("spark.sql.session.timeZone", "UTC")
             .getOrCreate())
     
     # Set log level
