@@ -1,4 +1,5 @@
 pyspark
 numpy
 matplotlib
+plotext
 rich

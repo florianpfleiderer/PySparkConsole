@@ -25,9 +25,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
+from pyspark.sql.window import Window
+from pyspark.sql.types import StringType, IntegerType
 
 from src.spark_session import create_spark_session, stop_spark_session
 from datetime import datetime
+import traceback
 
 # Install rich traceback handler for better error display
 install_rich_traceback()
@@ -227,23 +230,91 @@ class SparkDataConsoleApp:
                     else:
                         # For single files, read normally
                         self.df = self.session.read.csv(str(file_path), header=True, inferSchema=True)
+                        
+                    progress.update(task, description="[green]Data loaded, checking for null values...[/green]")
+                    
+                    # Check for null values in each column
+                    null_counts = {col: int(self.df.filter(F.col(col).isNull()).count()) 
+                                 for col in self.df.columns}
+                    
+                    # Filter out columns with no null values
+                    cols_with_nulls = {col: count for col, count in null_counts.items() if count > 0}
                     
                     row_count = self.df.count()
                     progress.update(task, description=f"[green]Loaded {row_count} rows successfully![/green]")
-                    
-                self.console.print(f"[bold green]Loaded:[/bold green] {file_path.name}")
-                self._display_dataframe(self.df, 5)
                 
-                # # Show schema information
-                # self.console.print("\n[bold cyan]Schema Information:[/bold cyan]")
-                # schema_table = Table(show_header=True, header_style="bold magenta", box=box.ROUNDED)
-                # schema_table.add_column("Column Name", style="green")
-                # schema_table.add_column("Data Type", style="blue")
-                
-                # for field in self.df.schema.fields:
-                #     schema_table.add_row(field.name, str(field.dataType))
+                if cols_with_nulls:
+                    # Create a table to display null value information
+                    null_table = Table(show_header=True, header_style="bold red", box=box.ROUNDED)
+                    null_table.add_column("Column", style="yellow")
+                    null_table.add_column("Data Type", style="magenta")
+                    null_table.add_column("Null Count", style="cyan")
+                    null_table.add_column("% of Total", style="green")
                     
-                # self.console.print(schema_table)
+                    # Create a dictionary of column types
+                    col_types = {field.name: str(field.dataType) for field in self.df.schema.fields}
+                    
+                    for col, count in cols_with_nulls.items():
+                        percentage = (count / row_count) * 100
+                        null_table.add_row(
+                            col,
+                            col_types[col],
+                            str(count),
+                            f"{percentage:.2f}%"
+                        )
+                    
+                    self.console.print("\n[bold red]Warning: Null values detected in the dataset![/bold red]")
+                    self.console.print(null_table)
+                    
+                    # Show handling information
+                    self.console.print("\n[bold]Null values will be handled as follows:[/bold]")
+                    self.console.print("• Text columns: Replace with 'MISSING'")
+                    self.console.print("• Numeric columns: Replace with -1")
+                    self.console.print("• Special values (':' characters): Convert to -1")
+                    
+                    # Simple yes/no prompt
+                    if Confirm.ask("\nWould you like to handle the null values as described above?", default=False):
+                        # Identify string and numeric columns
+                        string_cols = [col for col in self.df.schema.fields if isinstance(col.dataType, StringType)]
+                        string_col_names = [col.name for col in string_cols]
+                        numeric_col_names = [col.name for col in self.df.schema.fields if col.name not in string_col_names]
+                        
+                        # Fill null values in a new progress context
+                        with Progress(SpinnerColumn(), TextColumn("[cyan]Handling null values...[/cyan]")) as handle_progress:
+                            handle_task = handle_progress.add_task("", total=None)
+                            
+                            # Fill string columns with 'MISSING'
+                            self.df = self.df.fillna('MISSING', subset=string_col_names)
+                            handle_progress.update(handle_task, description="[cyan]Filled string columns...[/cyan]")
+                            
+                            # Fill numeric columns with -1
+                            self.df = self.df.fillna(-1, subset=numeric_col_names)
+                            handle_progress.update(handle_task, description="[cyan]Filled numeric columns...[/cyan]")
+                            
+                            # Special handling for any columns that need type conversion
+                            special_cols = self.df.select([col for col in self.df.columns if ':' in str(self.df.select(col).first()[0])])
+                            for special_col in special_cols.columns:
+                                self.df = self.df.replace(":", "-1", subset=special_col)
+                                if special_col in numeric_col_names:
+                                    self.df = self.df.withColumn(special_col, F.col(special_col).cast(IntegerType()))
+                            handle_progress.update(handle_task, description="[cyan]Handled special columns...[/cyan]")
+                            
+                            # Final verification
+                            remaining_nulls = {col: int(self.df.filter(F.col(col).isNull()).count()) 
+                                            for col in self.df.columns}
+                            handle_progress.update(handle_task, description="[green]Completed null value handling![/green]")
+                        
+                        self.console.print("\n[bold green]✓ Null values have been handled:[/bold green]")
+                        self.console.print("• String columns filled with 'MISSING'")
+                        self.console.print("• Numeric columns filled with -1")
+                        self.console.print("• Special characters (':') replaced with -1")
+                        
+                        if any(count > 0 for count in remaining_nulls.values()):
+                            self.console.print("\n[yellow]Note: Some null values could not be handled automatically.[/yellow]")
+                        else:
+                            self.console.print("\n[bold green]✓ All null values have been successfully handled![/bold green]")
+                
+                self.console.print(f"\n[bold green]Loaded:[/bold green] {file_path.name} ({row_count:,} rows)")
                 
             except (ValueError, IndexError):
                 self.console.print("[bold red]Invalid selection[/bold red]")
@@ -962,70 +1033,167 @@ class SparkDataConsoleApp:
         if self.df is None:
             self.console.print("[bold red]No data loaded. Please load data first.[/bold red]")
             return
-            
+        
         self.console.print(Panel("[bold]Visualize Data[/bold]", border_style="yellow"))
         
-        # Choose visualization type
-        viz_types = ["Bar Chart", "Histogram", "Scatter Plot", "Pie Chart"]
+        # Create visualization options table
         viz_table = Table(show_header=True, header_style="bold magenta", box=box.ROUNDED)
         viz_table.add_column("#", style="dim", width=6)
-        viz_table.add_column("Visualization Type", style="green")
-        viz_table.add_column("Status", style="yellow")
+        viz_table.add_column("Column to Analyze", style="green")
         
-        # Mark the visualization types that are unavailable without pandas
-        statuses = ["Coming soon", "Coming soon", "Coming soon", "Coming soon"]
+        # Available columns for visualization
+        columns = ["school_type", "region_name"]
+        target_col = "sess_overall_percent"
         
-        for i, (viz, status) in enumerate(zip(viz_types, statuses), 1):
-            viz_table.add_row(str(i), viz, status)
-            
+        # Add options to table
+        for i, column in enumerate(columns, 1):
+            viz_table.add_row(str(i), column.replace('_', ' ').title())
+        
         self.console.print(viz_table)
         
-        self.console.print("\n[bold yellow]Note:[/bold yellow] Advanced visualization features are coming soon. These will be implemented without using pandas library.")
-        
-        # Offer basic visualization options that don't require pandas
-        self.console.print("\n[bold cyan]Basic Data Statistics[/bold cyan]")
-        
-        if Confirm.ask("Would you like to see summary statistics for the current data?"):
-            # Display basic statistics using native PySpark functionality
-            try:
-                stats_table = Table(show_header=True, header_style="bold magenta", box=box.ROUNDED)
-                stats_table.add_column("Column", style="green")
-                stats_table.add_column("Count", style="blue")
-                stats_table.add_column("Mean", style="blue")
-                stats_table.add_column("Min", style="blue")
-                stats_table.add_column("Max", style="blue")
+        try:
+            # Get user choice
+            choice = Prompt.ask("Select column to analyze", choices=["1", "2"])
+            selected_column = columns[int(choice) - 1]
+            
+            # Create visualization
+            self._plot_stacked_bar(self.df, selected_column, target_col)
+            
+            # Show basic statistics option
+            if Confirm.ask("\nWould you like to see summary statistics for the current data?"):
+                self._display_basic_statistics()
                 
-                # Get numeric columns
-                numeric_cols = []
-                for field in self.df.schema.fields:
-                    data_type = str(field.dataType).lower()
-                    if "int" in data_type or "double" in data_type or "float" in data_type:
-                        numeric_cols.append(field.name)
+        except Exception as e:
+            self.console.print(f"[bold red]Error:[/bold red] {str(e)}")
+
+    def _plot_stacked_bar(self, df: DataFrame, column: str, target_col: str):
+        """
+        Plots stacked horizontal bar chart for the specified column.
+        
+        Args:
+            df: PySpark DataFrame containing the data
+            column: Column name to visualize
+            target_col: Target column to analyze (e.g. 'sess_overall_percent')
+        """
+        try:
+            # Check if target column has more than 6 unique values
+            target_unique = df.select(target_col).distinct().count()
+            
+            # Create 6 bins if numerical or more than 6 unique values
+            if target_unique > 6:
+                # Get min and max values for binning
+                stats = df.agg(F.min(target_col), F.max(target_col)).collect()[0]
+                min_val, max_val = stats[0], stats[1]
                 
-                if not numeric_cols:
-                    self.console.print("[yellow]No numeric columns found for statistics[/yellow]")
+                # Create bin edges with equal width
+                bin_edges = np.linspace(min_val, max_val, 7)  # 7 edges for 6 bins
+                bin_labels = [f"({bin_edges[i]:.1f}, {bin_edges[i+1]:.1f}]" for i in range(len(bin_edges)-1)]
+                
+                # Get unique values and sort them, filtering out None values
+                categories = [row[0] for row in df.select(column).distinct().orderBy(column).collect() if row[0] is not None]
+                if not categories:
+                    self.console.print(f"[bold red]No valid categories found for column {column}[/bold red]")
                     return
                 
-                # Calculate statistics using PySpark built-in methods
-                summary = self.df.select(numeric_cols).summary("count", "mean", "min", "max").collect()
-                count_row = summary[0]
-                mean_row = summary[1]
-                min_row = summary[2]
-                max_row = summary[3]
+                self.console.print(f"[dim]Found {len(categories)} categories for {column}[/dim]")
                 
-                for col in numeric_cols:
-                    stats_table.add_row(
-                        col,
-                        count_row[col],
-                        mean_row[col],
-                        min_row[col],
-                        max_row[col]
+                # Initialize data structure for proportions
+                data = []
+                
+                # Calculate proportions for each bin
+                for i in range(len(bin_edges)-1):
+                    filtered = df.filter(
+                        (F.col(target_col) >= bin_edges[i]) & 
+                        (F.col(target_col) < bin_edges[i+1]) &
+                        (F.col(column).isNotNull())  # Filter out null values
                     )
+                    
+                    # Group by category and calculate proportions
+                    counts = filtered.groupBy(column).count()
+                    total_counts = counts.agg(F.sum('count')).collect()[0][0] or 0
+                    
+                    if total_counts > 0:
+                        proportions = counts.withColumn(
+                            'proportion',
+                            F.col('count') / total_counts
+                        ).orderBy(column)
+                        
+                        # Convert to dictionary for ordered access
+                        prop_dict = {row[column]: float(row['proportion']) for row in proportions.collect() if row[column] in categories}
+                        data.append([prop_dict.get(cat, 0.0) for cat in categories])
+                    else:
+                        data.append([0.0] * len(categories))
                 
-                self.console.print(stats_table)
+                # Create the plot
+                plt.figure(figsize=(12, max(6, len(categories) * 0.4)))  # Adjust height based on number of categories
                 
-            except Exception as e:
-                self.console.print(f"[bold red]Error generating statistics:[/bold red] {str(e)}")
+                # Create color scheme similar to the notebook
+                colors = plt.cm.Greys(np.linspace(0.2, 0.8, len(bin_labels)))
+                
+                # Plot stacked bars
+                bottom = np.zeros(len(categories))
+                for i, d in enumerate(data):
+                    plt.barh(categories, d, left=bottom, color=colors[i], label=bin_labels[i])
+                    bottom += d
+                
+                # Customize the plot
+                plt.xlabel('Proportion')
+                plt.ylabel(column.replace('_', ' ').title())
+                plt.title(f"Distribution of {target_col.replace('_', ' ').title()} by {column.replace('_', ' ').title()}")
+                plt.legend(title=target_col.replace('_', ' ').title(), bbox_to_anchor=(1.05, 1), loc='upper left')
+                plt.tight_layout()
+                
+                # Save and show the plot
+                plt.savefig(f'plots/{column}_{target_col}_distribution.png', bbox_inches='tight')
+                plt.close()
+                
+                self.console.print(f"\nPlot saved as 'plots/{column}_{target_col}_distribution.png'")
+        
+        except Exception as e:
+            self.console.print(f"[bold red]Error creating plot:[/bold red] {str(e)}")
+            traceback.print_exc()
+
+    def _display_basic_statistics(self):
+        """Display basic statistics for numeric columns."""
+        try:
+            stats_table = Table(show_header=True, header_style="bold magenta", box=box.ROUNDED)
+            stats_table.add_column("Column", style="green")
+            stats_table.add_column("Count", style="blue")
+            stats_table.add_column("Mean", style="blue")
+            stats_table.add_column("Min", style="blue")
+            stats_table.add_column("Max", style="blue")
+            
+            # Get numeric columns
+            numeric_cols = []
+            for field in self.df.schema.fields:
+                data_type = str(field.dataType).lower()
+                if "int" in data_type or "double" in data_type or "float" in data_type:
+                    numeric_cols.append(field.name)
+            
+            if not numeric_cols:
+                self.console.print("[yellow]No numeric columns found for statistics[/yellow]")
+                return
+            
+            # Calculate statistics using PySpark built-in methods
+            summary = self.df.select(numeric_cols).summary("count", "mean", "min", "max").collect()
+            count_row = summary[0]
+            mean_row = summary[1]
+            min_row = summary[2]
+            max_row = summary[3]
+            
+            for col in numeric_cols:
+                stats_table.add_row(
+                    col,
+                    count_row[col],
+                    mean_row[col],
+                    min_row[col],
+                    max_row[col]
+                )
+            
+            self.console.print(stats_table)
+            
+        except Exception as e:
+            self.console.print(f"[bold red]Error generating statistics:[/bold red] {str(e)}")
     
     def filter_data(self):
         """Filter data with custom conditions."""
