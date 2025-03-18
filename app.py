@@ -43,7 +43,6 @@ from src.query_helpers import (
     analyze_absence_patterns
 )
 from src.visualisations import (
-    create_stacked_bar_plot,
     display_numeric_statistics,
     analyze_regional_attendance,
     create_absence_pattern_plots
@@ -339,7 +338,6 @@ class SparkDataConsoleApp:
         
         # Available visualization options
         viz_options = [
-            ("Distribution Analysis", "Analyze distribution of attendance by category"),
             ("Regional Performance", "Analyze regional attendance trends over time"),
             ("Absences / School Type / Location", "Analyze relationships between school types, locations, and absence rates"),
             ("Basic Statistics", "View summary statistics for numeric columns")
@@ -355,46 +353,10 @@ class SparkDataConsoleApp:
             # Get user choice
             choice = Prompt.ask(
                 "Select visualization type",
-                choices=["1", "2", "3", "4"]
+                choices=["1", "2", "3"]
             )
             
             if choice == "1":
-                # Distribution Analysis
-                columns = ["school_type", "region_name"]
-                target_col = "sess_overall_percent"
-                
-                # Create column selection table
-                col_table = Table(
-                    show_header=True,
-                    header_style="bold magenta",
-                    box=box.ROUNDED
-                )
-                col_table.add_column("#", style="dim", width=6)
-                col_table.add_column("Column", style="green")
-                
-                for i, column in enumerate(columns, 1):
-                    col_table.add_row(
-                        str(i),
-                        column.replace('_', ' ').title()
-                    )
-                
-                self.console.print(col_table)
-                
-                col_choice = Prompt.ask(
-                    "Select column to analyze",
-                    choices=["1", "2"]
-                )
-                selected_column = columns[int(col_choice) - 1]
-                
-                # Create visualization
-                success = create_stacked_bar_plot(
-                    self.df,
-                    selected_column,
-                    target_col,
-                    self.console
-                )
-                
-            elif choice == "2":
                 # Regional Performance Analysis
                 with Progress(
                     SpinnerColumn(),
@@ -403,7 +365,7 @@ class SparkDataConsoleApp:
                     task = progress.add_task("", total=None)
                     success = analyze_regional_attendance(self.df, self.console)
                     
-            elif choice == "3":
+            elif choice == "2":
                 # Handle School Type Location Analysis
                 with Progress(
                     SpinnerColumn(),
