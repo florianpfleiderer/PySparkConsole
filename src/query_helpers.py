@@ -816,6 +816,7 @@ def handle_school_type_query(
         allow_all=True
     )
 
+    # First filter by school type
     if is_all:
         console.print(f"[bold green]Showing all values for {title}:[/bold green]")
         result = df
@@ -827,10 +828,51 @@ def handle_school_type_query(
         ) as progress:
             task = progress.add_task("", total=None)
             result = df.filter(df[column] == selected_val)
-
-        console.print(f"[bold green]Results for {title} = {selected_val}:[/bold green]")
         school_type = selected_val
 
+    # Now handle time period selection
+    years = get_available_years(result)
+    
+    # Show time period options
+    time_table = Table(show_header=True, header_style="bold magenta")
+    time_table.add_column("#", style="dim", width=6)
+    time_table.add_column("Option", style="green")
+    
+    time_options = ["Single Year", "Year Range", "All Years"]
+    for i, option in enumerate(time_options, 1):
+        time_table.add_row(str(i), option)
+    
+    console.print("\nSelect time period type:")
+    console.print(time_table)
+    
+    time_choice = Prompt.ask("Enter choice", choices=["1", "2", "3"])
+    
+    if time_choice == "1":  # Single year
+        display_year_selection(years, console)
+        selected_year = select_year(years, console)
+        result = result.filter(F.col("time_period") == selected_year)
+        time_desc = f"Year {selected_year}"
+    elif time_choice == "2":  # Year range
+        console.print("\nSelect start year:")
+        display_year_selection(years, console)
+        start_year = select_year(years, console)
+        
+        console.print("\nSelect end year:")
+        while True:
+            end_year = select_year(years, console)
+            if end_year >= start_year:
+                break
+            console.print("[yellow]End year must be after start year[/yellow]")
+        
+        result = result.filter(
+            (F.col("time_period") >= start_year) & 
+            (F.col("time_period") <= end_year)
+        )
+        time_desc = f"Years {start_year}-{end_year}"
+    else:  # All years
+        time_desc = "All Years"
+
+    console.print(f"[bold green]Results for {school_type}, {time_desc}:[/bold green]")
     display_absence_stats(result, school_type, console)
     return result, True
 
