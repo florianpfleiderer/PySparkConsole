@@ -910,3 +910,44 @@ def handle_unauthorized_absences_query(
 
     display_unauth_absence_stats(df, breakdown_col, selected_year, console)
     return df, False
+
+def analyze_absence_patterns(
+    df: DataFrame,
+    console: Console
+) -> Tuple[DataFrame, bool]:
+    """
+    Analyze patterns between school types, locations, and absence rates.
+    
+    Args:
+        df: Input DataFrame
+        console: Rich console instance
+        
+    Returns:
+        Tuple of (processed DataFrame, whether to save result)
+    """
+    try:
+        # Get unique school types and regions
+        school_types = [row[0] for row in 
+                       df.select("school_type").distinct().orderBy("school_type").collect()]
+        regions = [row[0] for row in 
+                  df.select("region_name").distinct().orderBy("region_name").collect()]
+        years = [row[0] for row in 
+                df.select("time_period").distinct().orderBy("time_period").collect()]
+
+        # Calculate average absence rates by school type, region, and year
+        result = df.groupBy("school_type", "region_name", "time_period").agg(
+            F.avg("sess_overall_percent").alias("avg_absence_rate"),
+            F.count("*").alias("school_count")
+        ).orderBy("time_period", "school_type", "region_name")
+
+        # Display summary statistics
+        console.print("\n[bold]Analysis Summary:[/bold]")
+        console.print(f"• Number of school types analyzed: {len(school_types)}")
+        console.print(f"• Number of regions analyzed: {len(regions)}")
+        console.print(f"• Time period: {min(years)} to {max(years)}")
+
+        return result, True
+
+    except Exception as e:
+        console.print(f"[bold red]Error during analysis:[/bold red] {str(e)}")
+        return df, False

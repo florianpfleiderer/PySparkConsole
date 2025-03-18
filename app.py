@@ -39,12 +39,14 @@ from src.data_saver import save_dataframe, get_save_info
 from src.query_helpers import (
     handle_local_authority_query,
     handle_school_type_query,
-    handle_unauthorized_absences_query
+    handle_unauthorized_absences_query,
+    analyze_absence_patterns
 )
 from src.visualisations import (
     create_stacked_bar_plot,
     display_numeric_statistics,
-    analyze_regional_attendance
+    analyze_regional_attendance,
+    create_absence_pattern_plots
 )
 from datetime import datetime
 import traceback
@@ -339,6 +341,7 @@ class SparkDataConsoleApp:
         viz_options = [
             ("Distribution Analysis", "Analyze distribution of attendance by category"),
             ("Regional Performance", "Analyze regional attendance trends over time"),
+            ("Absences / School Type / Location", "Analyze relationships between school types, locations, and absence rates"),
             ("Basic Statistics", "View summary statistics for numeric columns")
         ]
         
@@ -352,7 +355,7 @@ class SparkDataConsoleApp:
             # Get user choice
             choice = Prompt.ask(
                 "Select visualization type",
-                choices=["1", "2", "3"]
+                choices=["1", "2", "3", "4"]
             )
             
             if choice == "1":
@@ -400,6 +403,17 @@ class SparkDataConsoleApp:
                     task = progress.add_task("", total=None)
                     success = analyze_regional_attendance(self.df, self.console)
                     
+            elif choice == "3":
+                # Handle School Type Location Analysis
+                with Progress(
+                    SpinnerColumn(),
+                    TextColumn("[green]Analyzing absence patterns...[/green]")
+                ) as progress:
+                    task = progress.add_task("", total=None)
+                    
+                    # Perform analysis and create visualizations
+                    result_df, _ = analyze_absence_patterns(self.df, self.console)
+                    success = create_absence_pattern_plots(result_df, self.console)
             else:
                 # Basic Statistics
                 display_numeric_statistics(self.df, self.console)

@@ -555,3 +555,126 @@ def display_regional_analysis(data: DataFrame, console: Console) -> None:
     console.print("• plots/regional_attendance_trends.png")
     console.print("• plots/regional_absence_comparison.png")
     console.print("• plots/regional_attendance_improvement.png") 
+
+def create_absence_pattern_plots(
+    df: DataFrame,
+    console: Console
+) -> bool:
+    """
+    Create visualizations showing relationships between school types, 
+    locations, and absence rates.
+    
+    Args:
+        df: DataFrame containing the analyzed data
+        console: Rich console instance
+        
+    Returns:
+        bool: True if visualization was successful
+    """
+    try:
+        # Ensure we have the correct column name
+        if "avg_absence_rate" not in df.columns:
+            console.print("[yellow]Warning: Column names may have changed during analysis[/yellow]")
+            console.print("Available columns:", df.columns)
+            return False
+
+        # Get the latest year for the heatmap
+        latest_year = df.select("time_period").distinct().orderBy(
+            F.desc("time_period")
+        ).first()[0]
+        
+        latest_data = df.filter(F.col("time_period") == latest_year)
+        
+        # Create pivot table with explicit column names
+        pivot_data = latest_data.groupBy("school_type").pivot("region_name").agg(
+            F.first("avg_absence_rate").alias("avg_absence_rate")
+        ).orderBy("school_type")
+        
+        # Convert to numpy array for plotting
+        school_types = [row["school_type"] for row in pivot_data.collect()]
+        regions = [col for col in pivot_data.columns if col != "school_type"]
+        data = np.array([[float(row[region] or 0) for region in regions] 
+                        for row in pivot_data.collect()])
+        
+        # Create heatmap as separate plot
+        plt.figure(figsize=(15, 8))
+        heatmap = plt.imshow(data, aspect='auto', cmap='YlOrRd')
+        plt.colorbar(heatmap, label='Average Absence Rate (%)')
+        plt.xticks(range(len(regions)), regions, rotation=45, ha='right')
+        plt.yticks(range(len(school_types)), school_types)
+        plt.title(f'Regional Absence Rates by School Type ({latest_year})')
+        
+        # Add value annotations to the heatmap
+        for i in range(len(school_types)):
+            for j in range(len(regions)):
+                plt.text(j, i, f'{data[i, j]:.1f}%',
+                        ha='center', va='center')
+        
+        plt.tight_layout()
+        plt.savefig('plots/regional_heatmap.png', bbox_inches='tight', dpi=300)
+        plt.close()
+
+        # Create trend lines as separate plot
+        plt.figure(figsize=(15, 8))
+        for school_type in school_types:
+            school_data = df.filter(F.col("school_type") == school_type)
+            years = [str(row["time_period"]) for row in 
+                    school_data.select("time_period").distinct().orderBy("time_period").collect()]
+            
+            rates_data = school_data.groupBy("time_period").agg(
+                F.avg("avg_absence_rate").alias("rate")
+            ).orderBy("time_period").collect()
+            
+            rates = [float(row["rate"]) for row in rates_data]
+            
+            plt.plot(years, rates, marker='o', label=school_type, linewidth=2)
+        
+        plt.xlabel('Academic Year')
+        plt.ylabel('Average Absence Rate (%)')
+        plt.title('Absence Rate Trends Over Time')
+        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        plt.grid(True, alpha=0.3)
+        plt.xticks(rotation=45)
+        
+        plt.tight_layout()
+        plt.savefig('plots/trends_by_type.png', bbox_inches='tight', dpi=300)
+        plt.close()
+
+        # Display key findings and visualization summary
+        console.print("\n[bold green]Analysis completed successfully![/bold green]")
+        
+        console.print("\n[bold]Key Findings:[/bold]")
+        
+        # Find school type with highest and lowest absence rates
+        latest_avg = latest_data.groupBy("school_type").agg(
+            F.avg("avg_absence_rate").alias("avg_rate")
+        ).collect()
+        
+        highest = max(latest_avg, key=lambda x: float(x["avg_rate"] or 0))
+        lowest = min(latest_avg, key=lambda x: float(x["avg_rate"] or 0))
+        
+        console.print(f"• Highest absence rate: [red]{highest['school_type']}[/red] ({float(highest['avg_rate']):.1f}%)")
+        console.print(f"• Lowest absence rate: [green]{lowest['school_type']}[/green] ({float(lowest['avg_rate']):.1f}%)")
+        
+        # Calculate regional variations
+        regional_var = latest_data.groupBy("region_name").agg(
+            F.avg("avg_absence_rate").alias("avg_rate")
+        ).collect()
+        
+        highest_region = max(regional_var, key=lambda x: float(x["avg_rate"] or 0))
+        lowest_region = min(regional_var, key=lambda x: float(x["avg_rate"] or 0))
+        
+        console.print(f"• Region with highest absences: [red]{highest_region['region_name']}[/red] ({float(highest_region['avg_rate']):.1f}%)")
+        console.print(f"• Region with lowest absences: [green]{lowest_region['region_name']}[/green] ({float(lowest_region['avg_rate']):.1f}%)")
+        
+        # Show visualization files created
+        console.print("\n[bold]Visualization files created:[/bold]")
+        console.print("• plots/regional_heatmap.png - Regional absence rates by school type")
+        console.print("• plots/trends_by_type.png - Absence rate trends over time")
+        
+        return True
+        
+    except Exception as e:
+        console.print(f"[bold red]Error creating visualization:[/bold red] {str(e)}")
+        traceback.print_exc()
+        return False 
