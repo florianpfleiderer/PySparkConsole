@@ -201,17 +201,15 @@ def load_csv_data(
         - Dict[str, int]: Dictionary of null counts per column
     """
     try:
-        # Load the data
         df = spark.read.csv(str(file_path), header=True, inferSchema=True)
-        
-        # Check for null values in each column
+
         null_counts = {
-            col: int(df.filter(F.col(col).isNull()).count()) 
+            col: int(df.filter(F.col(col).isNull()).count())
             for col in df.columns
         }
-        
+
         return df, null_counts
-        
+
     except Exception as e:
         logging.error(f"Error loading data from {file_path}: {str(e)}")
         raise

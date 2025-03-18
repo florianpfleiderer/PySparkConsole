@@ -1,6 +1,12 @@
+# Created on Tue Mar 18 2025 by 240030614
+"""
+This module provides a function to save a PySpark DataFrame to disk in
+various formats (e.g., CSV, Parquet, JSON), handling directory creation,
+logging errors, and providing detailed output on the save operation.
+"""
 from __future__ import annotations
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 import logging
 
 from pyspark.sql import DataFrame
@@ -35,7 +41,7 @@ def save_dataframe(
     try:
         # Create parent directory if it doesn't exist
         save_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         # Save based on format
         if file_format == "csv":
             df.repartition(1).write.csv(
@@ -49,7 +55,7 @@ def save_dataframe(
             df.write.json(str(save_path), mode=mode)
         else:
             raise ValueError(f"Unsupported file format: {file_format}")
-        
+
         # Get file information if directory exists
         files = []
         if save_path.exists():
@@ -60,14 +66,14 @@ def save_dataframe(
                 }
                 for item in save_path.iterdir()
             ]
-        
+
         return {
             "success": True,
             "path": save_path,
             "files": files,
             "error": None
         }
-        
+
     except Exception as e:
         logging.error(f"Error saving data to {save_path}: {str(e)}")
         return {
@@ -110,4 +116,4 @@ def get_save_info(file_format: str) -> str:
             "- Maintains data types and structure"
         )
     else:
-        return f"Unknown format: {file_format}" 
+        return f"Unknown format: {file_format}"

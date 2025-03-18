@@ -22,6 +22,12 @@ Console choices:
   * (school_type / absences / time_period)
   * unauthorised absences in certain year  by region name / local auth name
 
+TODO: 
+
+select a certain year before showing the school type absences to advere more with the practical specs
+
+give a time period (eg 200809 - 201011) to the school_type query
+
 ### functionality - part 2
 
 * compare local auths (use search beforehand)
