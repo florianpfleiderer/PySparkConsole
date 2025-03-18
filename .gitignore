@@ -3,10 +3,10 @@
 
 ### my own files ###
 data/raw/*
-!data/raw/train_values.csv
 data/processed/*
 src/_version.py
 tmp/*
+plots/*
 
 ### Git ###
 # Created by git for backups. To disable backups in Git:
