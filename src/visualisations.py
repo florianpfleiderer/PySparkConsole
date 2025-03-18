@@ -351,7 +351,7 @@ def create_regional_trend_plot(data: DataFrame) -> None:
     
     plt.xlabel("Academic Year")
     plt.ylabel("Average Attendance (%)")
-    plt.title("Regional Attendance Trends Over Time")
+    # plt.title("Regional Attendance Trends Over Time")
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.grid(True, alpha=0.3)
     
@@ -402,7 +402,7 @@ def create_regional_comparison_plot(data: DataFrame) -> None:
     
     plt.xlabel("Region")
     plt.ylabel("Average Absence Rate (%)")
-    plt.title("Overall Regional Absence Rate Comparison")
+    # plt.title("Overall Regional Absence Rate Comparison")
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
     
@@ -457,7 +457,7 @@ def create_regional_improvement_plot(data: DataFrame) -> None:
     
     plt.xlabel("Region")
     plt.ylabel("Change in Attendance (%)")
-    plt.title("Regional Attendance Improvement")
+    # plt.title("Regional Attendance Improvement")
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
     
