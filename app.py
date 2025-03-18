@@ -43,7 +43,8 @@ from src.query_helpers import (
 )
 from src.visualisations import (
     create_stacked_bar_plot,
-    display_numeric_statistics
+    display_numeric_statistics,
+    analyze_regional_attendance
 )
 from datetime import datetime
 import traceback
@@ -331,34 +332,84 @@ class SparkDataConsoleApp:
         # Create visualization options table
         viz_table = Table(show_header=True, header_style="bold magenta", box=box.ROUNDED)
         viz_table.add_column("#", style="dim", width=6)
-        viz_table.add_column("Column to Analyze", style="green")
+        viz_table.add_column("Visualization Type", style="green")
+        viz_table.add_column("Description", style="blue")
         
-        # Available columns for visualization
-        columns = ["school_type", "region_name"]
-        target_col = "sess_overall_percent"
+        # Available visualization options
+        viz_options = [
+            ("Distribution Analysis", "Analyze distribution of attendance by category"),
+            ("Regional Performance", "Analyze regional attendance trends over time"),
+            ("Basic Statistics", "View summary statistics for numeric columns")
+        ]
         
         # Add options to table
-        for i, column in enumerate(columns, 1):
-            viz_table.add_row(str(i), column.replace('_', ' ').title())
+        for i, (viz_type, description) in enumerate(viz_options, 1):
+            viz_table.add_row(str(i), viz_type, description)
         
         self.console.print(viz_table)
         
         try:
             # Get user choice
-            choice = Prompt.ask("Select column to analyze", choices=["1", "2"])
-            selected_column = columns[int(choice) - 1]
-            
-            # Create visualization using the new module
-            success = create_stacked_bar_plot(
-                self.df,
-                selected_column,
-                target_col,
-                self.console
+            choice = Prompt.ask(
+                "Select visualization type",
+                choices=["1", "2", "3"]
             )
             
-            # Show basic statistics option if plot was created successfully
-            if success and Confirm.ask("\nWould you like to see summary statistics for the current data?"):
+            if choice == "1":
+                # Distribution Analysis
+                columns = ["school_type", "region_name"]
+                target_col = "sess_overall_percent"
+                
+                # Create column selection table
+                col_table = Table(
+                    show_header=True,
+                    header_style="bold magenta",
+                    box=box.ROUNDED
+                )
+                col_table.add_column("#", style="dim", width=6)
+                col_table.add_column("Column", style="green")
+                
+                for i, column in enumerate(columns, 1):
+                    col_table.add_row(
+                        str(i),
+                        column.replace('_', ' ').title()
+                    )
+                
+                self.console.print(col_table)
+                
+                col_choice = Prompt.ask(
+                    "Select column to analyze",
+                    choices=["1", "2"]
+                )
+                selected_column = columns[int(col_choice) - 1]
+                
+                # Create visualization
+                success = create_stacked_bar_plot(
+                    self.df,
+                    selected_column,
+                    target_col,
+                    self.console
+                )
+                
+            elif choice == "2":
+                # Regional Performance Analysis
+                with Progress(
+                    SpinnerColumn(),
+                    TextColumn("[green]Analyzing regional performance...[/green]")
+                ) as progress:
+                    task = progress.add_task("", total=None)
+                    success = analyze_regional_attendance(self.df, self.console)
+                    
+            else:
+                # Basic Statistics
                 display_numeric_statistics(self.df, self.console)
+                success = True
+            
+            if not success:
+                self.console.print(
+                    "[yellow]Unable to create visualization. "
+                    "Please check your data and try again.[/yellow]"
+                )
                 
         except Exception as e:
             self.console.print(f"[bold red]Error:[/bold red] {str(e)}")

@@ -269,3 +269,262 @@ def add_statistics_to_table(
             min_row[col],
             max_row[col]
         ) 
+
+def analyze_regional_attendance(
+    df: DataFrame,
+    console: Console
+) -> bool:
+    """Analyze regional attendance performance over time.
+    
+    Args:
+        df: Input DataFrame containing the data
+        console: Rich console instance for output
+        
+    Returns:
+        bool: True if analysis was successful, False otherwise
+    """
+    try:
+        # Filter for England regions only
+        df_england = df.filter(
+            (F.col("country_name") == "England") & 
+            (F.col("geographic_level") == "Regional")
+        )
+        
+        # Group by region and year, calculate average attendance
+        region_year_stats = df_england.groupBy(
+            "region_name", "time_period"
+        ).agg(
+            F.avg("sess_overall_percent").alias("avg_attendance"),
+            F.count("*").alias("school_count")
+        ).orderBy("region_name", "time_period")
+        
+        if region_year_stats.count() == 0:
+            console.print("[bold red]No regional data found for analysis[/bold red]")
+            return False
+            
+        # Create plots
+        create_regional_trend_plot(region_year_stats)
+        create_regional_comparison_plot(region_year_stats)
+        create_regional_improvement_plot(region_year_stats)
+        
+        # Display analysis results
+        display_regional_analysis(region_year_stats, console)
+        
+        return True
+        
+    except Exception as e:
+        console.print(f"[bold red]Error analyzing regional data:[/bold red] {str(e)}")
+        traceback.print_exc()
+        return False
+
+def create_regional_trend_plot(data: DataFrame) -> None:
+    """Create line plot showing attendance trends by region.
+    
+    Args:
+        data: PySpark DataFrame with regional statistics
+    """
+    plt.figure(figsize=(12, 6))
+    
+    # Collect unique regions
+    regions = [row.region_name for row in 
+              data.select("region_name").distinct().orderBy("region_name").collect()]
+    
+    for region in regions:
+        # Filter and collect data for each region
+        region_data = data.filter(F.col("region_name") == region).orderBy("time_period")
+        region_rows = region_data.collect()
+        
+        plt.plot(
+            [row.time_period for row in region_rows],
+            [row.avg_attendance for row in region_rows],
+            marker='o',
+            label=region
+        )
+    
+    plt.xlabel("Year")
+    plt.ylabel("Average Attendance (%)")
+    plt.title("Regional Attendance Trends Over Time")
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    
+    plt.savefig(
+        'plots/regional_attendance_trends.png',
+        bbox_inches='tight'
+    )
+    plt.close()
+
+def create_regional_comparison_plot(data: DataFrame) -> None:
+    """Create bar plot comparing attendance distributions by region.
+    
+    Args:
+        data: PySpark DataFrame with regional statistics
+    """
+    plt.figure(figsize=(12, 6))
+    
+    # Calculate overall statistics for each region
+    region_stats = data.groupBy("region_name").agg(
+        F.mean("avg_attendance").alias("mean"),
+        F.stddev("avg_attendance").alias("std")
+    ).orderBy("mean")
+    
+    # Collect results
+    stats_rows = region_stats.collect()
+    regions = [row.region_name for row in stats_rows]
+    means = [row.mean for row in stats_rows]
+    stds = [row.std if row.std is not None else 0 for row in stats_rows]
+    
+    # Create bar plot with error bars
+    plt.bar(
+        range(len(regions)),
+        means,
+        yerr=stds,
+        capsize=5
+    )
+    
+    plt.xticks(
+        range(len(regions)),
+        regions,
+        rotation=45,
+        ha='right'
+    )
+    
+    plt.xlabel("Region")
+    plt.ylabel("Average Attendance (%)")
+    plt.title("Overall Regional Attendance Comparison")
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    
+    plt.savefig(
+        'plots/regional_attendance_comparison.png',
+        bbox_inches='tight'
+    )
+    plt.close()
+
+def create_regional_improvement_plot(data: DataFrame) -> None:
+    """Create plot showing attendance improvement by region.
+    
+    Args:
+        data: PySpark DataFrame with regional statistics
+    """
+    plt.figure(figsize=(12, 6))
+    
+    # Calculate improvement for each region
+    improvements = []
+    regions = []
+    
+    # Get unique regions
+    region_list = [row.region_name for row in 
+                  data.select("region_name").distinct().orderBy("region_name").collect()]
+    
+    for region in region_list:
+        region_data = data.filter(F.col("region_name") == region).orderBy("time_period")
+        region_rows = region_data.collect()
+        
+        if len(region_rows) > 0:
+            first_year = region_rows[0].avg_attendance
+            last_year = region_rows[-1].avg_attendance
+            improvement = last_year - first_year
+            improvements.append(improvement)
+            regions.append(region)
+    
+    # Sort by improvement
+    sorted_indices = np.argsort(improvements)
+    improvements = np.array(improvements)[sorted_indices]
+    regions = np.array(regions)[sorted_indices]
+    
+    # Create bar plot
+    colors = ['red' if x < 0 else 'green' for x in improvements]
+    plt.bar(range(len(improvements)), improvements, color=colors)
+    
+    plt.xticks(
+        range(len(improvements)),
+        regions,
+        rotation=45,
+        ha='right'
+    )
+    
+    plt.xlabel("Region")
+    plt.ylabel("Change in Attendance (%)")
+    plt.title("Regional Attendance Improvement")
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    
+    plt.savefig(
+        'plots/regional_attendance_improvement.png',
+        bbox_inches='tight'
+    )
+    plt.close()
+
+def display_regional_analysis(data: DataFrame, console: Console) -> None:
+    """Display analysis of regional attendance performance.
+    
+    Args:
+        data: PySpark DataFrame with regional statistics
+        console: Rich console instance for output
+    """
+    # Calculate improvements for each region
+    improvements = {}
+    
+    # Get unique regions
+    region_list = [row.region_name for row in 
+                  data.select("region_name").distinct().orderBy("region_name").collect()]
+    
+    for region in region_list:
+        region_data = data.filter(F.col("region_name") == region).orderBy("time_period")
+        region_rows = region_data.collect()
+        
+        if len(region_rows) > 0:
+            first_year = region_rows[0].avg_attendance
+            last_year = region_rows[-1].avg_attendance
+            improvement = last_year - first_year
+            improvements[region] = improvement
+    
+    # Find best and worst regions
+    best_region = max(improvements.items(), key=lambda x: x[1])
+    worst_region = min(improvements.items(), key=lambda x: x[1])
+    
+    # Create results table
+    table = Table(
+        show_header=True,
+        header_style="bold magenta",
+        box=box.ROUNDED
+    )
+    table.add_column("Region", style="green")
+    table.add_column("Change (%)", style="blue")
+    table.add_column("Status", style="yellow")
+    
+    for region, change in sorted(
+        improvements.items(),
+        key=lambda x: x[1],
+        reverse=True
+    ):
+        status = (
+            "Improved" if change > 0
+            else "Worsened" if change < 0
+            else "No Change"
+        )
+        table.add_row(
+            region,
+            f"{change:.2f}",
+            status
+        )
+    
+    # Display results
+    console.print("\n[bold]Regional Attendance Analysis[/bold]")
+    console.print(
+        f"\nBest performing region: [green]{best_region[0]}[/green] "
+        f"(+{best_region[1]:.2f}%)"
+    )
+    console.print(
+        f"Worst performing region: [red]{worst_region[0]}[/red] "
+        f"({worst_region[1]:.2f}%)"
+    )
+    
+    console.print("\n[bold]Detailed Regional Performance:[/bold]")
+    console.print(table)
+    
+    console.print("\n[bold]Visualization files created:[/bold]")
+    console.print("• plots/regional_attendance_trends.png")
+    console.print("• plots/regional_attendance_comparison.png")
+    console.print("• plots/regional_attendance_improvement.png") 
