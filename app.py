@@ -6,7 +6,6 @@ PySpark data manipulation.
 from __future__ import annotations
 from pathlib import Path
 import argparse
-# import os
 import sys
 import logging
 from typing import Optional, List, Dict, Any
@@ -29,16 +28,22 @@ from pyspark.sql.window import Window
 from pyspark.sql.types import StringType, IntegerType
 
 from src.spark_session import create_spark_session, stop_spark_session
-from src.data_loader import load_csv_data, handle_null_values
+from src.data_loader import (
+    load_csv_data,
+    handle_null_values,
+    find_csv_files,
+    create_file_table,
+    create_null_value_table
+)
 from src.data_saver import save_dataframe, get_save_info
 from src.query_helpers import (
-    display_enrollment_stats,
-    display_absence_stats,
-    display_unauth_absence_stats,
-    compare_local_authorities,
     handle_local_authority_query,
     handle_school_type_query,
     handle_unauthorized_absences_query
+)
+from src.visualisations import (
+    create_stacked_bar_plot,
+    display_numeric_statistics
 )
 from datetime import datetime
 import traceback
@@ -153,70 +158,29 @@ class SparkDataConsoleApp:
         """Load data from a CSV file."""
         self.console.print(Panel("[bold]Load Data[/bold]", border_style="yellow"))
         try:
-            # First, find all CSV files and directories that might contain CSV files
-            csv_files = []
-            processed_dirs = []
-            
-            # Handle data/processed directory specially
-            processed_dir = self.data_dir / "processed"
-            if processed_dir.exists():
-                # Look for directories containing CSV files in processed/
-                for item in processed_dir.iterdir():
-                    if item.is_dir() and not item.name.startswith('.'):
-                        # Check if directory contains CSV files (typical for Spark partitioned output)
-                        has_csv = any(f.suffix == '.csv' and not f.name.startswith('.') for f in item.iterdir())
-                        if has_csv:
-                            processed_dirs.append(item)
-            
-            # Find CSV files in all directories except processed/
-            for item in self.data_dir.rglob('*.csv'):
-                # Skip files in processed/ directory and hidden files
-                if not item.is_file() or item.name.startswith('.') or 'processed' in item.parts:
-                    continue
-                csv_files.append(item)
+            # Find CSV files and directories
+            csv_files, processed_dirs = find_csv_files(self.data_dir)
             
             if not csv_files and not processed_dirs:
-                self.console.print(f"[bold red]No CSV files found in {self.data_dir} directory[/bold red]")
+                self.console.print(
+                    f"[bold red]No CSV files found in {self.data_dir} "
+                    f"directory[/bold red]"
+                )
                 if Confirm.ask("Would you like to specify a different data directory?"):
                     dir_path = Prompt.ask("Enter path to data directory")
                     self.data_dir = Path(dir_path)
                     self.load_data()  # Retry with new directory
                 return
-                
-            # Create table for display
-            table = Table(show_header=True, header_style="bold magenta", box=box.ROUNDED)
-            table.add_column("#", style="dim", width=6)
-            table.add_column("Type", style="yellow")
-            table.add_column("Location", style="blue")
-            table.add_column("Name", style="green")
-            table.add_column("Size", style="cyan")
-            table.add_column("Last Modified", style="magenta")
             
-            # Add regular CSV files
-            for i, file in enumerate(csv_files, 1):
-                size = f"{file.stat().st_size / 1024:.1f} KB"
-                modified = datetime.fromtimestamp(file.stat().st_mtime).strftime('%Y-%m-%d %H:%M')
-                # Get relative path from data directory
-                rel_path = file.relative_to(self.data_dir)
-                location = str(rel_path.parent)
-                if location == '.':
-                    location = 'data'
-                table.add_row(str(i), "File", location, file.name, size, modified)
-            
-            # Add directories containing partitioned CSVs
-            for i, dir_path in enumerate(processed_dirs, len(csv_files) + 1):
-                # Calculate total size of CSV files in directory
-                total_size = sum(f.stat().st_size for f in dir_path.rglob('*.csv') if not f.name.startswith('.'))
-                size = f"{total_size / 1024:.1f} KB"
-                modified = datetime.fromtimestamp(dir_path.stat().st_mtime).strftime('%Y-%m-%d %H:%M')
-                table.add_row(str(i), "Directory", "processed", dir_path.name, size, modified)
-                
+            # Display file table
+            table = create_file_table(csv_files, processed_dirs)
             self.console.print(table)
-                
+            
+            # Get user selection
             choice = Prompt.ask("Select number (or 'c' to cancel)")
             if choice.lower() == 'c':
                 return
-                
+            
             try:
                 index = int(choice) - 1
                 total_items = len(csv_files) + len(processed_dirs)
@@ -224,58 +188,43 @@ class SparkDataConsoleApp:
                 if index < 0 or index >= total_items:
                     raise ValueError("Invalid selection number")
                 
-                # Determine if selection is a file or directory
+                # Get selected file info
                 if index < len(csv_files):
-                    file_path = csv_files[index]
-                    is_directory = False
+                    file_info = csv_files[index]
                 else:
-                    file_path = processed_dirs[index - len(csv_files)]
-                    is_directory = True
+                    file_info = processed_dirs[index - len(csv_files)]
                 
-                with Progress(SpinnerColumn(), TextColumn("[green]Loading data...[/green]")) as progress:
+                with Progress(
+                    SpinnerColumn(),
+                    TextColumn("[green]Loading data...[/green]")
+                ) as progress:
                     task = progress.add_task("", total=None)
                     
-                    # Use the new data_loader module
+                    # Load data using data_loader module
                     self.df, null_counts = load_csv_data(
-                        self.session, 
-                        file_path,
-                        is_directory
+                        self.session,
+                        file_info.path,
+                        file_info.is_directory
                     )
                     
-                    progress.update(task, description="[green]Data loaded, checking for null values...[/green]")
+                    progress.update(
+                        task,
+                        description="[green]Data loaded, checking for null values...[/green]"
+                    )
                     
-                    # Filter out columns with no null values
-                    cols_with_nulls = {
-                        col: count for col, count in null_counts.items() 
-                        if count > 0
-                    }
+                    # Create null value table
+                    null_table, cols_with_nulls = create_null_value_table(
+                        self.df,
+                        null_counts
+                    )
                     
                     row_count = self.df.count()
-                    progress.update(task, description=f"[green]Loaded {row_count} rows successfully![/green]")
+                    progress.update(
+                        task,
+                        description=f"[green]Loaded {row_count} rows successfully![/green]"
+                    )
                 
-                if cols_with_nulls:
-                    # Create a table to display null value information
-                    null_table = Table(show_header=True, header_style="bold red", box=box.ROUNDED)
-                    null_table.add_column("Column", style="yellow")
-                    null_table.add_column("Data Type", style="magenta")
-                    null_table.add_column("Null Count", style="cyan")
-                    null_table.add_column("% of Total", style="green")
-                    
-                    # Create a dictionary of column types
-                    col_types = {
-                        field.name: str(field.dataType) 
-                        for field in self.df.schema.fields
-                    }
-                    
-                    for col, count in cols_with_nulls.items():
-                        percentage = (count / row_count) * 100
-                        null_table.add_row(
-                            col,
-                            col_types[col],
-                            str(count),
-                            f"{percentage:.2f}%"
-                        )
-                    
+                if null_table:
                     self.console.print("\n[bold red]Warning: Null values detected in the dataset![/bold red]")
                     self.console.print(null_table)
                     
@@ -285,18 +234,26 @@ class SparkDataConsoleApp:
                     self.console.print("• Numeric columns: Replace with -1")
                     self.console.print("• Special values (':' characters): Convert to -1")
                     
-                    # Simple yes/no prompt
-                    if Confirm.ask("\nWould you like to handle the null values as described above?", default=False):
-                        with Progress(SpinnerColumn(), TextColumn("[cyan]Handling null values...[/cyan]")) as handle_progress:
+                    if Confirm.ask(
+                        "\nWould you like to handle the null values as described above?",
+                        default=False
+                    ):
+                        with Progress(
+                            SpinnerColumn(),
+                            TextColumn("[cyan]Handling null values...[/cyan]")
+                        ) as handle_progress:
                             handle_task = handle_progress.add_task("", total=None)
                             
-                            # Use the new handle_null_values function
+                            # Handle null values
                             self.df, remaining_nulls = handle_null_values(
-                                self.df, 
+                                self.df,
                                 null_counts
                             )
                             
-                            handle_progress.update(handle_task, description="[green]Completed null value handling![/green]")
+                            handle_progress.update(
+                                handle_task,
+                                description="[green]Completed null value handling![/green]"
+                            )
                         
                         self.console.print("\n[bold green]✓ Null values have been handled:[/bold green]")
                         self.console.print("• String columns filled with 'MISSING'")
@@ -304,32 +261,41 @@ class SparkDataConsoleApp:
                         self.console.print("• Special characters (':') replaced with -1")
                         
                         if any(count > 0 for count in remaining_nulls.values()):
-                            self.console.print("\n[yellow]Note: Some null values could not be handled automatically.[/yellow]")
+                            self.console.print(
+                                "\n[yellow]Note: Some null values could not be handled "
+                                "automatically.[/yellow]"
+                            )
                         else:
-                            self.console.print("\n[bold green]✓ All null values have been successfully handled![/bold green]")
+                            self.console.print(
+                                "\n[bold green]✓ All null values have been successfully "
+                                "handled![/bold green]"
+                            )
                 
-                self.console.print(f"\n[bold green]Loaded:[/bold green] {file_path.name} ({row_count:,} rows)")
+                self.console.print(
+                    f"\n[bold green]Loaded:[/bold green] {file_info.name} "
+                    f"({row_count:,} rows)"
+                )
                 
             except (ValueError, IndexError):
                 self.console.print("[bold red]Invalid selection[/bold red]")
         except Exception as e:
             self.console.print(f"[bold red]Error:[/bold red] {str(e)}")
     
-    def _display_enrollment_stats(self, df: DataFrame, authorities: List[str]):
-        """Display enrollment statistics by year for selected local authorities."""
-        display_enrollment_stats(df, authorities, self.console)
+    # def _display_enrollment_stats(self, df: DataFrame, authorities: List[str]):
+    #     """Display enrollment statistics by year for selected local authorities."""
+    #     display_enrollment_stats(df, authorities, self.console)
 
-    def _display_absence_stats(self, df: DataFrame, school_type: str):
-        """Display authorized absence statistics for the selected school type by year."""
-        display_absence_stats(df, school_type, self.console)
+    # def _display_absence_stats(self, df: DataFrame, school_type: str):
+    #     """Display authorized absence statistics for the selected school type by year."""
+    #     display_absence_stats(df, school_type, self.console)
 
-    def _display_unauth_absence_stats(self, df: DataFrame, breakdown_by: str, year: str):
-        """Display unauthorized absence statistics broken down by region or local authority."""
-        display_unauth_absence_stats(df, breakdown_by, year, self.console)
+    # def _display_unauth_absence_stats(self, df: DataFrame, breakdown_by: str, year: str):
+    #     """Display unauthorized absence statistics broken down by region or local authority."""
+    #     display_unauth_absence_stats(df, breakdown_by, year, self.console)
 
-    def _compare_local_authorities(self, df: DataFrame, auth1: str, auth2: str, year: str):
-        """Compare two local authorities for a given year across multiple metrics."""
-        compare_local_authorities(df, auth1, auth2, year, self.console)
+    # def _compare_local_authorities(self, df: DataFrame, auth1: str, auth2: str, year: str):
+    #     """Compare two local authorities for a given year across multiple metrics."""
+    #     compare_local_authorities(df, auth1, auth2, year, self.console)
 
     def query_data(self):
         """Query the dataframe by local authority or school type."""
@@ -398,145 +364,21 @@ class SparkDataConsoleApp:
             choice = Prompt.ask("Select column to analyze", choices=["1", "2"])
             selected_column = columns[int(choice) - 1]
             
-            # Create visualization
-            self._plot_stacked_bar(self.df, selected_column, target_col)
+            # Create visualization using the new module
+            success = create_stacked_bar_plot(
+                self.df,
+                selected_column,
+                target_col,
+                self.console
+            )
             
-            # Show basic statistics option
-            if Confirm.ask("\nWould you like to see summary statistics for the current data?"):
-                self._display_basic_statistics()
+            # Show basic statistics option if plot was created successfully
+            if success and Confirm.ask("\nWould you like to see summary statistics for the current data?"):
+                display_numeric_statistics(self.df, self.console)
                 
         except Exception as e:
             self.console.print(f"[bold red]Error:[/bold red] {str(e)}")
 
-    def _plot_stacked_bar(self, df: DataFrame, column: str, target_col: str):
-        """
-        Plots stacked horizontal bar chart for the specified column.
-        
-        Args:
-            df: PySpark DataFrame containing the data
-            column: Column name to visualize
-            target_col: Target column to analyze (e.g. 'sess_overall_percent')
-        """
-        try:
-            # Check if target column has more than 6 unique values
-            target_unique = df.select(target_col).distinct().count()
-            
-            # Create 6 bins if numerical or more than 6 unique values
-            if target_unique > 6:
-                # Get min and max values for binning
-                stats = df.agg(F.min(target_col), F.max(target_col)).collect()[0]
-                min_val, max_val = stats[0], stats[1]
-                
-                # Create bin edges with equal width
-                bin_edges = np.linspace(min_val, max_val, 7)  # 7 edges for 6 bins
-                bin_labels = [f"({bin_edges[i]:.1f}, {bin_edges[i+1]:.1f}]" for i in range(len(bin_edges)-1)]
-                
-                # Get unique values and sort them, filtering out None values
-                categories = [row[0] for row in df.select(column).distinct().orderBy(column).collect() if row[0] is not None]
-                if not categories:
-                    self.console.print(f"[bold red]No valid categories found for column {column}[/bold red]")
-                    return
-                
-                self.console.print(f"[dim]Found {len(categories)} categories for {column}[/dim]")
-                
-                # Initialize data structure for proportions
-                data = []
-                
-                # Calculate proportions for each bin
-                for i in range(len(bin_edges)-1):
-                    filtered = df.filter(
-                        (F.col(target_col) >= bin_edges[i]) & 
-                        (F.col(target_col) < bin_edges[i+1]) &
-                        (F.col(column).isNotNull())  # Filter out null values
-                    )
-                    
-                    # Group by category and calculate proportions
-                    counts = filtered.groupBy(column).count()
-                    total_counts = counts.agg(F.sum('count')).collect()[0][0] or 0
-                    
-                    if total_counts > 0:
-                        proportions = counts.withColumn(
-                            'proportion',
-                            F.col('count') / total_counts
-                        ).orderBy(column)
-                        
-                        # Convert to dictionary for ordered access
-                        prop_dict = {row[column]: float(row['proportion']) for row in proportions.collect() if row[column] in categories}
-                        data.append([prop_dict.get(cat, 0.0) for cat in categories])
-                    else:
-                        data.append([0.0] * len(categories))
-                
-                # Create the plot
-                plt.figure(figsize=(12, max(6, len(categories) * 0.4)))  # Adjust height based on number of categories
-                
-                # Create color scheme similar to the notebook
-                colors = plt.cm.Greys(np.linspace(0.2, 0.8, len(bin_labels)))
-                
-                # Plot stacked bars
-                bottom = np.zeros(len(categories))
-                for i, d in enumerate(data):
-                    plt.barh(categories, d, left=bottom, color=colors[i], label=bin_labels[i])
-                    bottom += d
-                
-                # Customize the plot
-                plt.xlabel('Proportion')
-                plt.ylabel(column.replace('_', ' ').title())
-                plt.title(f"Distribution of {target_col.replace('_', ' ').title()} by {column.replace('_', ' ').title()}")
-                plt.legend(title=target_col.replace('_', ' ').title(), bbox_to_anchor=(1.05, 1), loc='upper left')
-                plt.tight_layout()
-                
-                # Save and show the plot
-                plt.savefig(f'plots/{column}_{target_col}_distribution.png', bbox_inches='tight')
-                plt.close()
-                
-                self.console.print(f"\nPlot saved as 'plots/{column}_{target_col}_distribution.png'")
-        
-        except Exception as e:
-            self.console.print(f"[bold red]Error creating plot:[/bold red] {str(e)}")
-            traceback.print_exc()
-
-    def _display_basic_statistics(self):
-        """Display basic statistics for numeric columns."""
-        try:
-            stats_table = Table(show_header=True, header_style="bold magenta", box=box.ROUNDED)
-            stats_table.add_column("Column", style="green")
-            stats_table.add_column("Count", style="blue")
-            stats_table.add_column("Mean", style="blue")
-            stats_table.add_column("Min", style="blue")
-            stats_table.add_column("Max", style="blue")
-            
-            # Get numeric columns
-            numeric_cols = []
-            for field in self.df.schema.fields:
-                data_type = str(field.dataType).lower()
-                if "int" in data_type or "double" in data_type or "float" in data_type:
-                    numeric_cols.append(field.name)
-            
-            if not numeric_cols:
-                self.console.print("[yellow]No numeric columns found for statistics[/yellow]")
-                return
-            
-            # Calculate statistics using PySpark built-in methods
-            summary = self.df.select(numeric_cols).summary("count", "mean", "min", "max").collect()
-            count_row = summary[0]
-            mean_row = summary[1]
-            min_row = summary[2]
-            max_row = summary[3]
-            
-            for col in numeric_cols:
-                stats_table.add_row(
-                    col,
-                    count_row[col],
-                    mean_row[col],
-                    min_row[col],
-                    max_row[col]
-                )
-            
-            self.console.print(stats_table)
-            
-        except Exception as e:
-            self.console.print(f"[bold red]Error generating statistics:[/bold red] {str(e)}")
-    
     def filter_data(self):
         """Filter data with custom conditions."""
         if self.df is None:
