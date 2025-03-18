@@ -9,16 +9,7 @@ import argparse
 import sys
 import logging
 from typing import Optional, List, Dict, Any
-
-from rich.console import Console
-from rich.table import Table
-from rich.panel import Panel
-from rich.syntax import Syntax
-from rich.progress import Progress, SpinnerColumn, TextColumn
-from rich.prompt import Prompt, Confirm
-from rich import box
-from rich.markdown import Markdown
-from rich.traceback import install as install_rich_traceback
+from datetime import datetime
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -27,15 +18,26 @@ from pyspark.sql import functions as F
 from pyspark.sql.window import Window
 from pyspark.sql.types import StringType, IntegerType
 
-from src.spark_session import create_spark_session, stop_spark_session
-from src.data_loader import (
+from src.utils.spark_utils import (
+    create_spark_session,
+    stop_spark_session,
+    get_active_session
+)
+from src.utils.data_handling import (
     load_csv_data,
     handle_null_values,
     find_csv_files,
     create_file_table,
-    create_null_value_table
+    create_null_value_table,
+    save_dataframe,
+    get_save_info
 )
-from src.data_saver import save_dataframe, get_save_info
+from src.utils.display_utils import (
+    create_progress,
+    display_dataframe_preview,
+    create_menu_table,
+    create_status_panel
+)
 from src.query_helpers import (
     handle_local_authority_query,
     handle_school_type_query,
@@ -47,8 +49,16 @@ from src.visualisations import (
     analyze_regional_attendance,
     create_absence_pattern_plots
 )
-from datetime import datetime
-import traceback
+
+from rich.console import Console
+from rich.table import Table
+from rich.panel import Panel
+from rich.syntax import Syntax
+from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.prompt import Prompt, Confirm
+from rich import box
+from rich.markdown import Markdown
+from rich.traceback import install as install_rich_traceback
 
 # Install rich traceback handler for better error display
 install_rich_traceback()

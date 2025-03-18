@@ -31,10 +31,16 @@ project_root/
 │-- app.py
 │-- src/
 │   │-- utils/
-│   │   │-- helpers.py
+│   │   │-- data_handling.py (from data_loader.py & data_saver.py)
+│   │   │-- spark_utils.py (from spark_session.py)
+│   │   └── display_utils.py (UI-related utilities)
 │   │-- modules/
-│   │   │-- feature_x.py
-│   │   │-- feature_y.py
+│   │   │-- queries/
+│   │   │   │-- enrollment.py
+│   │   │   │-- absence.py
+│   │   │   └── comparison.py
+│   │   └── visualization/
+│   │       └── plots.py (from visualisations.py)
 │-- data/ (...)
 │-- plots/ (...)
 ```
