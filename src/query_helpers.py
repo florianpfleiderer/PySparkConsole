@@ -936,8 +936,7 @@ def analyze_absence_patterns(
 
         # Calculate average absence rates by school type, region, and year
         result = df.groupBy("school_type", "region_name", "time_period").agg(
-            F.avg("sess_overall_percent").alias("avg_absence_rate"),
-            F.count("*").alias("school_count")
+            F.avg("sess_overall_percent").alias("avg_absence_rate")
         ).orderBy("time_period", "school_type", "region_name")
 
         # Display summary statistics

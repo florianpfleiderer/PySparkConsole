@@ -116,8 +116,7 @@ def analyze_regional_attendance(
             "region_name", "time_period"
         ).agg(
             (100 - F.avg("sess_overall_percent")).alias("avg_attendance"),
-            F.avg("sess_overall_percent").alias("avg_absence"),
-            F.sum("num_schools").alias("school_count")
+            F.avg("sess_overall_percent").alias("avg_absence")
         ).orderBy("region_name", "time_period")
         
         if region_year_stats.count() == 0:
