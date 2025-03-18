@@ -280,22 +280,6 @@ class SparkDataConsoleApp:
                 self.console.print("[bold red]Invalid selection[/bold red]")
         except Exception as e:
             self.console.print(f"[bold red]Error:[/bold red] {str(e)}")
-    
-    # def _display_enrollment_stats(self, df: DataFrame, authorities: List[str]):
-    #     """Display enrollment statistics by year for selected local authorities."""
-    #     display_enrollment_stats(df, authorities, self.console)
-
-    # def _display_absence_stats(self, df: DataFrame, school_type: str):
-    #     """Display authorized absence statistics for the selected school type by year."""
-    #     display_absence_stats(df, school_type, self.console)
-
-    # def _display_unauth_absence_stats(self, df: DataFrame, breakdown_by: str, year: str):
-    #     """Display unauthorized absence statistics broken down by region or local authority."""
-    #     display_unauth_absence_stats(df, breakdown_by, year, self.console)
-
-    # def _compare_local_authorities(self, df: DataFrame, auth1: str, auth2: str, year: str):
-    #     """Compare two local authorities for a given year across multiple metrics."""
-    #     compare_local_authorities(df, auth1, auth2, year, self.console)
 
     def query_data(self):
         """Query the dataframe by local authority or school type."""
