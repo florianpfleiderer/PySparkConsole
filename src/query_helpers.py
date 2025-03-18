@@ -435,15 +435,15 @@ def compare_local_authorities(
         # Calculate percentage metrics
         for auth in [auth1, auth2]:
             metrics_dict[auth]["auth_absence_rate"] = calc_percentage(
-                metrics_dict[auth]["total_authorised"], 
+                metrics_dict[auth]["total_authorised"],
                 metrics_dict[auth]["total_possible"]
             )
             metrics_dict[auth]["unauth_absence_rate"] = calc_percentage(
-                metrics_dict[auth]["total_unauthorised"], 
+                metrics_dict[auth]["total_unauthorised"],
                 metrics_dict[auth]["total_possible"]
             )
             metrics_dict[auth]["total_absence_rate"] = (
-                metrics_dict[auth]["auth_absence_rate"] + 
+                metrics_dict[auth]["auth_absence_rate"] +
                 metrics_dict[auth]["unauth_absence_rate"]
             )
 
