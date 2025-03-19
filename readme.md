@@ -64,7 +64,7 @@ Author: 240030614
 
 2. Run the main application:
    ```bash
-   python app.py
+   python3 app.py
    ```
 
 ## Available Commands

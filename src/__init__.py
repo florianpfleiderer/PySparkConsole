@@ -32,7 +32,7 @@ from src.queries import (
     handle_local_authority_query,
     handle_school_type_query,
     handle_unauthorized_absences_query,
-    analyze_absence_patterns
+    analyse_absence_patterns
 )
 
 __version__ = '1.0.0'
@@ -63,5 +63,5 @@ __all__ = [
     'handle_local_authority_query',
     'handle_school_type_query',
     'handle_unauthorized_absences_query',
-    'analyze_absence_patterns'
+    'analyse_absence_patterns'
 ]

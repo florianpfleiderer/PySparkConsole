@@ -693,7 +693,7 @@ def handle_local_authority_query(
     """
     # First filter for Local authority level and Total school type
     base_df = df.filter(
-        (F.col("geographic_level") == "Local authority") & 
+        (F.col("geographic_level") == "Local authority") &
         (F.col("school_type") == "Total")
     )
     
@@ -988,14 +988,14 @@ def handle_unauthorized_absences_query(
     geographic_level = "Regional" if breakdown_choice == "1" else "Local authority"
 
     base_df = df.filter(
-        (F.col("geographic_level") == geographic_level) & 
+        (F.col("geographic_level") == geographic_level) &
         (F.col("school_type") == "Total")
     )
 
     display_unauth_absence_stats(base_df, breakdown_col, selected_year, console)
     return df, False
 
-def analyze_absence_patterns(
+def analyse_absence_patterns(
     df: DataFrame,
     console: Console
 ) -> Tuple[DataFrame, bool]:
@@ -1026,7 +1026,8 @@ def analyze_absence_patterns(
 
         # Calculate weighted absence rates by school type, region, and year
         result = base_df.groupBy("school_type", "region_name", "time_period").agg(
-            (100.0 * F.sum("sess_overall") / F.sum("sess_possible")).alias("avg_absence_rate"),
+            (100.0 * F.sum("sess_overall") / F.sum("sess_possible"))\
+                .alias("avg_absence_rate"),
             F.sum("sess_overall").alias("total_sessions"),
             F.sum("sess_possible").alias("total_possible_sessions")
         ).orderBy("time_period", "school_type", "region_name")

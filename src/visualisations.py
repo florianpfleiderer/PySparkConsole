@@ -81,7 +81,7 @@ def add_statistics_to_table(
     """
     summary = df.select(numeric_cols).summary("count", "mean", "min", "max").collect()
     count_row, mean_row, min_row, max_row = summary[:4]
-    
+
     for col in numeric_cols:
         table.add_row(
             col,
@@ -89,9 +89,9 @@ def add_statistics_to_table(
             mean_row[col],
             min_row[col],
             max_row[col]
-        ) 
+        )
 
-def analyze_regional_attendance(
+def analyse_regional_attendance(
     df: DataFrame,
     console: Console
 ) -> bool:
@@ -107,14 +107,14 @@ def analyze_regional_attendance(
     try:
         # Filter for England regions only
         df_england = df.filter(
-            (F.col("country_name") == "England") & 
-            (F.col("geographic_level") == "Regional")
+            (F.col("geographic_level") == "Regional") &
+            (F.col("school_type") == "Total")
         )
-        
+
         # Group by region and year, calculate weighted attendance/absence rates
         attendance_expr = 100 * (1 - F.sum("sess_overall") / F.sum("sess_possible"))
         absence_expr = 100 * F.sum("sess_overall") / F.sum("sess_possible")
-        
+
         region_year_stats = (
             df_england.groupBy("region_name", "time_period")
             .agg(
@@ -123,23 +123,23 @@ def analyze_regional_attendance(
             )
             .orderBy("region_name", "time_period")
         )
-        
+
         if region_year_stats.count() == 0:
             console.print("[bold red]No regional data found for analysis[/bold red]")
             return False
-            
+
         # Create plots
         create_regional_trend_plot(region_year_stats)
         create_regional_comparison_plot(region_year_stats)
         create_regional_improvement_plot(region_year_stats)
-        
+
         # Display analysis results
         display_regional_analysis(region_year_stats, console)
-        
+
         return True
-        
+
     except Exception as e:
-        console.print(f"[bold red]Error analyzing regional data:[/bold red] {str(e)}")
+        console.print(f"[bold red]Error analysing regional data:[/bold red] {str(e)}")
         traceback.print_exc()
         return False
 
@@ -150,40 +150,40 @@ def create_regional_trend_plot(data: DataFrame) -> None:
         data: PySpark DataFrame with regional statistics
     """
     plt.figure(figsize=(12, 6))
-    
+
     # Collect unique regions
-    regions = [row.region_name for row in 
+    regions = [row.region_name for row in
               data.select("region_name").distinct().orderBy("region_name").collect()]
-    
+
     for region in regions:
         # Filter and collect data for each region
         region_data = data.filter(F.col("region_name") == region).orderBy("time_period")
         region_rows = region_data.collect()
-        
+
         # Convert year codes to academic year format (e.g., 200600 -> 2006/07)
         years = []
         for row in region_rows:
             year_start = str(row.time_period)[:4]
             year_end = str(int(year_start) + 1)[2:4]
             years.append(f"{year_start}/{year_end}")
-        
+
         plt.plot(
             years,
             [row.avg_attendance for row in region_rows],
             marker='o',
             label=region
         )
-    
+
     plt.xlabel("Academic Year")
     plt.ylabel("Average Attendance (%)")
     plt.title("Regional Attendance Trends Over Time")
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.grid(True, alpha=0.3)
-    
+
     # Rotate x-axis labels for better readability
     plt.xticks(rotation=45, ha='right')
     plt.tight_layout()
-    
+
     plt.savefig(
         'plots/regional_attendance_trends.png',
         bbox_inches='tight'
@@ -387,7 +387,7 @@ def create_absence_pattern_plots(
 ) -> bool:
     """
     Create visualizations showing relationships between school types and absence rates.
-    Uses pre-calculated absence rates from analyze_absence_patterns().
+    Uses pre-calculated absence rates from analyse_absence_patterns().
     
     Args:
         df: DataFrame with pre-calculated avg_absence_rate by school type, region, time

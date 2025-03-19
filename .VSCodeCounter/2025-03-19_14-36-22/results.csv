@@ -1,0 +1,14 @@
+"filename", "language", "Python", "JSON", "Markdown", "pip requirements", "comment", "blank", "total"
+"/cs/home/fp84/Documents/CS5052/CS5052-P1/app.py", "Python", 497, 0, 0, 0, 42, 121, 660
+"/cs/home/fp84/Documents/CS5052/CS5052-P1/developer_context.md", "Markdown", 0, 0, 47, 0, 0, 8, 55
+"/cs/home/fp84/Documents/CS5052/CS5052-P1/notebooks/data_analysis.ipynb", "JSON", 0, 189, 0, 0, 0, 1, 190
+"/cs/home/fp84/Documents/CS5052/CS5052-P1/readme.md", "Markdown", 0, 0, 75, 0, 0, 27, 102
+"/cs/home/fp84/Documents/CS5052/CS5052-P1/requirements.txt", "pip requirements", 0, 0, 0, 4, 0, 0, 4
+"/cs/home/fp84/Documents/CS5052/CS5052-P1/src/__init__.py", "Python", 53, 0, 0, 0, 4, 11, 68
+"/cs/home/fp84/Documents/CS5052/CS5052-P1/src/queries.py", "Python", 866, 0, 0, 0, 59, 184, 1109
+"/cs/home/fp84/Documents/CS5052/CS5052-P1/src/utils/__init__.py", "Python", 43, 0, 0, 0, 3, 8, 54
+"/cs/home/fp84/Documents/CS5052/CS5052-P1/src/utils/data_handling.py", "Python", 293, 0, 0, 0, 16, 62, 371
+"/cs/home/fp84/Documents/CS5052/CS5052-P1/src/utils/display_utils.py", "Python", 112, 0, 0, 0, 4, 32, 148
+"/cs/home/fp84/Documents/CS5052/CS5052-P1/src/utils/spark_utils.py", "Python", 44, 0, 0, 0, 1, 18, 63
+"/cs/home/fp84/Documents/CS5052/CS5052-P1/src/visualisations.py", "Python", 374, 0, 0, 0, 35, 82, 491
+"Total", "-", 2282, 189, 122, 4, 164, 554, 3315

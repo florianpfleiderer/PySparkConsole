@@ -4,9 +4,9 @@ This module provides functions for creating, managing, and configuring Spark ses
 """
 
 from __future__ import annotations
-from pyspark.sql import SparkSession
 import logging
 from typing import Optional
+from pyspark.sql import SparkSession
 
 # Configure logging
 logging.getLogger("py4j").setLevel(logging.ERROR)
@@ -35,10 +35,10 @@ def create_spark_session(app_name: str = "MySpark", log_level: str = "ERROR") ->
     spark = (SparkSession.builder
             .master("local[*]")
             .appName(app_name)
-            .config("spark.driver.extraJavaOptions", 
+            .config("spark.driver.extraJavaOptions",
                    "-Djava.security.manager=allow")
             .getOrCreate())
-    
+
     set_spark_log_level(spark, log_level)
     return spark
 
@@ -59,4 +59,4 @@ def get_active_session() -> Optional[SparkSession]:
     Returns:
         Active session or None
     """
-    return SparkSession.getActiveSession() 
+    return SparkSession.getActiveSession()

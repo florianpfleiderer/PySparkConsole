@@ -11,18 +11,15 @@ import logging
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
-import matplotlib.pyplot as plt
-import numpy as np
-from pyspark.sql import DataFrame
-from pyspark.sql import functions as F
-from pyspark.sql.window import Window
-from pyspark.sql.types import StringType, IntegerType
+from rich.console import Console
+from rich.table import Table
+from rich.panel import Panel
+from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.prompt import Prompt, Confirm
+from rich import box
+from rich.markdown import Markdown
+from rich.traceback import install as install_rich_traceback
 
-from src.utils.spark_utils import (
-    create_spark_session,
-    stop_spark_session,
-    get_active_session
-)
 from src.utils.data_handling import (
     load_csv_data,
     handle_null_values,
@@ -32,33 +29,18 @@ from src.utils.data_handling import (
     save_dataframe,
     get_save_info
 )
-from src.utils.display_utils import (
-    create_progress,
-    display_dataframe_preview,
-    create_menu_table,
-    create_status_panel
-)
+
 from src.queries import (
     handle_local_authority_query,
     handle_school_type_query,
     handle_unauthorized_absences_query,
-    analyze_absence_patterns
+    analyse_absence_patterns
 )
 from src.visualisations import (
     display_numeric_statistics,
-    analyze_regional_attendance,
+    analyse_regional_attendance,
     create_absence_pattern_plots
 )
-
-from rich.console import Console
-from rich.table import Table
-from rich.panel import Panel
-from rich.syntax import Syntax
-from rich.progress import Progress, SpinnerColumn, TextColumn
-from rich.prompt import Prompt, Confirm
-from rich import box
-from rich.markdown import Markdown
-from rich.traceback import install as install_rich_traceback
 
 # Install rich traceback handler for better error display
 install_rich_traceback()
@@ -137,7 +119,7 @@ class SparkDataConsoleApp:
                 elif choice == 'q':
                     self.query_data()
                 elif choice == 'v':
-                    self.visualize_data()
+                    self.visualise_data()
                 elif choice == 'f':
                     self.filter_data()
                 elif choice == 's':
@@ -335,7 +317,7 @@ class SparkDataConsoleApp:
         except Exception as e:
             self.console.print(f"[bold red]Error during query:[/bold red] {str(e)}")
     
-    def visualize_data(self):
+    def visualise_data(self):
         """Visualize data using matplotlib."""
         if self.df is None:
             self.console.print("[bold red]No data loaded. Please load data first.[/bold red]")
@@ -386,7 +368,7 @@ class SparkDataConsoleApp:
                     TextColumn("[green]Analyzing regional performance...[/green]")
                 ) as progress:
                     task = progress.add_task("", total=None)
-                    success = analyze_regional_attendance(self.df, self.console)
+                    success = analyse_regional_attendance(self.df, self.console)
                     
             elif choice == "2":
                 # Handle School Type Location Analysis
@@ -397,7 +379,7 @@ class SparkDataConsoleApp:
                     task = progress.add_task("", total=None)
                     
                     # Perform analysis and create visualizations
-                    result_df, _ = analyze_absence_patterns(self.df, self.console)
+                    result_df, _ = analyse_absence_patterns(self.df, self.console)
                     success = create_absence_pattern_plots(result_df, self.console)
             else:
                 # Basic Statistics
