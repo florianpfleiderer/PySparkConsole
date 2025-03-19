@@ -20,6 +20,11 @@ from rich import box
 from rich.markdown import Markdown
 from rich.traceback import install as install_rich_traceback
 
+from src.utils.spark_utils import (
+    create_spark_session,
+    stop_spark_session
+)
+
 from src.utils.data_handling import (
     load_csv_data,
     handle_null_values,
@@ -33,9 +38,10 @@ from src.utils.data_handling import (
 from src.queries import (
     handle_local_authority_query,
     handle_school_type_query,
-    handle_unauthorized_absences_query,
+    handle_unauthorised_absences_query,
     analyse_absence_patterns
 )
+
 from src.visualisations import (
     display_numeric_statistics,
     analyse_regional_attendance,
@@ -56,7 +62,7 @@ class SparkDataConsoleApp:
 
     def __init__(self, data_dir: Path = DEFAULT_DATA_DIR, app_name: str = "SparkDataApp"):
         """
-        Initialize the application.
+        Initialise the application.
         
         Args:
             data_dir: Directory containing data files
@@ -102,7 +108,7 @@ class SparkDataConsoleApp:
 [bold cyan]Available commands:[/bold cyan]
 [yellow]l[/yellow] - Load data
 [yellow]q[/yellow] - Query data
-[yellow]v[/yellow] - Visualize data
+[yellow]v[/yellow] - Visualise data
 [yellow]f[/yellow] - Filter data
 [yellow]s[/yellow] - Save data
 [yellow]h[/yellow] - Help
@@ -291,7 +297,7 @@ class SparkDataConsoleApp:
         query_table.add_column("#", style="dim", width=6)
         query_table.add_column("Query Type", style="green")
         
-        query_options = ["Local Authority", "School Type", "Unauthorized Absences"]
+        query_options = ["Local Authority", "School Type", "Unauthorised Absences"]
         for i, option in enumerate(query_options, 1):
             query_table.add_row(str(i), option)
             
@@ -304,8 +310,8 @@ class SparkDataConsoleApp:
                 result, save_result = handle_local_authority_query(self.df, self.console)
             elif choice == "2":  # School Type
                 result, save_result = handle_school_type_query(self.df, self.console)
-            else:  # Unauthorized Absences
-                result, save_result = handle_unauthorized_absences_query(self.df, self.console)
+            else:  # Unauthorised Absences
+                result, save_result = handle_unauthorised_absences_query(self.df, self.console)
             
             self.last_query_result = result
             
@@ -318,7 +324,7 @@ class SparkDataConsoleApp:
             self.console.print(f"[bold red]Error during query:[/bold red] {str(e)}")
     
     def visualise_data(self):
-        """Visualize data using matplotlib."""
+        """Visualise data using matplotlib."""
         if self.df is None:
             self.console.print("[bold red]No data loaded. Please load data first.[/bold red]")
             return
@@ -333,31 +339,31 @@ class SparkDataConsoleApp:
                 self.console.print(f"[bold red]Error creating plots directory:[/bold red] {str(e)}")
                 return
         
-        self.console.print(Panel("[bold]Visualize Data[/bold]", border_style="yellow"))
+        self.console.print(Panel("[bold]Visualise Data[/bold]", border_style="yellow"))
         
-        # Create visualization options table
-        viz_table = Table(show_header=True, header_style="bold magenta", box=box.ROUNDED)
-        viz_table.add_column("#", style="dim", width=6)
-        viz_table.add_column("Visualization Type", style="green")
-        viz_table.add_column("Description", style="blue")
+        # Create visualisation options table
+        vis_table = Table(show_header=True, header_style="bold magenta", box=box.ROUNDED)
+        vis_table.add_column("#", style="dim", width=6)
+        vis_table.add_column("Visualisation Type", style="green")
+        vis_table.add_column("Description", style="blue")
         
-        # Available visualization options
-        viz_options = [
-            ("Regional Performance", "Analyze regional attendance trends over time"),
-            ("Absences / School Type / Location", "Analyze relationships between school types, locations, and absence rates"),
+        # Available visualisation options
+        vis_options = [
+            ("Regional Performance", "Analyse regional attendance trends over time"),
+            ("Absences / School Type / Location", "Analyse relationships between school types, locations, and absence rates"),
             ("Basic Statistics", "View summary statistics for numeric columns")
         ]
         
         # Add options to table
-        for i, (viz_type, description) in enumerate(viz_options, 1):
-            viz_table.add_row(str(i), viz_type, description)
+        for i, (vis_type, description) in enumerate(vis_options, 1):
+            vis_table.add_row(str(i), vis_type, description)
         
-        self.console.print(viz_table)
+        self.console.print(vis_table)
         
         try:
             # Get user choice
             choice = Prompt.ask(
-                "Select visualization type",
+                "Select visualisation type",
                 choices=["1", "2", "3"]
             )
             
@@ -365,7 +371,7 @@ class SparkDataConsoleApp:
                 # Regional Performance Analysis
                 with Progress(
                     SpinnerColumn(),
-                    TextColumn("[green]Analyzing regional performance...[/green]")
+                    TextColumn("[green]Analysing regional performance...[/green]")
                 ) as progress:
                     task = progress.add_task("", total=None)
                     success = analyse_regional_attendance(self.df, self.console)
@@ -374,11 +380,11 @@ class SparkDataConsoleApp:
                 # Handle School Type Location Analysis
                 with Progress(
                     SpinnerColumn(),
-                    TextColumn("[green]Analyzing absence patterns...[/green]")
+                    TextColumn("[green]Analysing absence patterns...[/green]")
                 ) as progress:
                     task = progress.add_task("", total=None)
                     
-                    # Perform analysis and create visualizations
+                    # Perform analysis and create visualisations
                     result_df, _ = analyse_absence_patterns(self.df, self.console)
                     success = create_absence_pattern_plots(result_df, self.console)
             else:
@@ -388,7 +394,7 @@ class SparkDataConsoleApp:
             
             if not success:
                 self.console.print(
-                    "[yellow]Unable to create visualization. "
+                    "[yellow]Unable to create visualisation. "
                     "Please check your data and try again.[/yellow]"
                 )
                 
@@ -540,7 +546,7 @@ class SparkDataConsoleApp:
 
 * `l` - **Load data**: Load a CSV file into a Spark DataFrame
 * `q` - **Query data**: Filter data by column values
-* `v` - **Visualize data**: View basic statistics (advanced visualization coming soon)
+* `v` - **Visualise data**: View basic statistics (advanced visualisation coming soon)
 * `f` - **Filter data**: Apply custom filters to your data
 * `s` - **Save data**: Export data to various formats
 * `h` - **Help**: Show this help message
@@ -550,7 +556,7 @@ class SparkDataConsoleApp:
 
 * When loading data, the application will scan the data directory for CSV files
 * Use query and filter to narrow down your dataset
-* Statistics and basic data information are available in the visualize menu
+* Statistics and basic data information are available in the visualise menu
 * Save your results in various formats for later use
         """
         

@@ -1,7 +1,7 @@
 """
 School Attendance Data Analysis Package.
 
-This package provides tools and utilities for analyzing school attendance data
+This package provides tools and utilities for analysing school attendance data
 using PySpark.
 """
 
@@ -31,7 +31,7 @@ from src.utils.display_utils import (
 from src.queries import (
     handle_local_authority_query,
     handle_school_type_query,
-    handle_unauthorized_absences_query,
+    handle_unauthorised_absences_query,
     analyse_absence_patterns
 )
 
@@ -62,6 +62,6 @@ __all__ = [
     # Query helpers
     'handle_local_authority_query',
     'handle_school_type_query',
-    'handle_unauthorized_absences_query',
+    'handle_unauthorised_absences_query',
     'analyse_absence_patterns'
 ]

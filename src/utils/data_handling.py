@@ -144,7 +144,7 @@ def create_null_value_table(
     """Create a Rich table showing null value information.
     
     Args:
-        df: DataFrame to analyze
+        df: DataFrame to analyse
         null_counts: Dictionary of column names to null counts
         
     Returns:
@@ -357,7 +357,7 @@ def get_save_info(file_format: str) -> str:
         "parquet": (
             "Data will be saved in Parquet format.\n"
             "• Compressed binary format\n"
-            "• Optimized for analytics\n"
+            "• Optimised for analytics\n"
             "• Schema preserved"
         ),
         "json": (

@@ -47,7 +47,7 @@ Author: 240030614
 ├── data/              # Data directory
 │   ├── raw/          # Raw CSV files directory
 │   └── processed/    # Default save location for processed data
-├── plots/             # Generated plots and visualizations
+├── plots/             # Generated plots and visualisations
 └── requirements.txt   # Project dependencies
 ```
 
@@ -72,10 +72,10 @@ Author: 240030614
 The application provides an interactive console interface with the following options:
 
 1. Load Data - Load and process CSV files
-2. Query by Local Authority - Analyze data for specific local authorities
-3. Query by School Type - Filter and analyze data by school types
-4. Analyze Unauthorized Absences - Study patterns in unauthorized absences
-5. Generate Visualizations - Create plots and charts for data analysis
+2. Query by Local Authority - Analyse data for specific local authorities
+3. Query by School Type - Filter and analyse data by school types
+4. Analyse Unauthorised Absences - Study patterns in unauthorised absences
+5. Generate Visualisations - Create plots and charts for data analysis
 6. Exit - Quit the application
 
 ## Troubleshooting
@@ -84,7 +84,7 @@ The application provides an interactive console interface with the following opt
    - Ensure Java 8 or higher is installed
    - Set JAVA_HOME environment variable correctly
 
-2. If you see PySpark initialization warnings:
+2. If you see PySpark initialisation warnings:
    - These are normal and won't affect functionality
    - You can set SPARK_LOCAL_IP if needed
 
@@ -94,7 +94,7 @@ The application provides an interactive console interface with the following opt
 
 ## Notes
 
-- The application uses PySpark for data processing, which may take a few seconds to initialize on first run
+- The application uses PySpark for data processing, which may take a few seconds to initialise on first run
 - Generated plots are saved in the plots/ directory
 - Use Ctrl+C to force quit the application if needed
 

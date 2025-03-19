@@ -99,7 +99,7 @@ def display_absence_stats(
     console: Console
 ) -> None:
     """
-    Display authorized absence statistics for the selected school type by year.
+    Display authorised absence statistics for the selected school type by year.
     
     Args:
         df: PySpark DataFrame containing the data
@@ -114,11 +114,11 @@ def display_absence_stats(
         show_header=True,
         header_style="bold magenta",
         box=box.ROUNDED,
-        title=f"Authorized Absences Summary for {school_type}"
+        title=f"Authorised Absences Summary for {school_type}"
     )
 
     table.add_column("Year", style="green")
-    table.add_column("Total Authorized Absences", justify="right", style="blue")
+    table.add_column("Total Authorised Absences", justify="right", style="blue")
     table.add_column("Total Enrollments", justify="right", style="blue")
     table.add_column("Absences per Student", justify="right", style="yellow")
 
@@ -207,7 +207,7 @@ def show_detailed_absence_breakdown(
 
         detail_table.add_column("Absence Type", style="green")
         detail_table.add_column("Total Sessions", justify="right", style="blue")
-        detail_table.add_column("% of All Authorized", justify="right", style="yellow")
+        detail_table.add_column("% of All Authorised", justify="right", style="yellow")
         detail_table.add_column("Sessions per Student", justify="right", style="cyan")
 
         # Calculate totals for percentage calculation
@@ -216,7 +216,7 @@ def show_detailed_absence_breakdown(
             F.sum("enrolments").alias("total_enrol")
         ).collect()[0]
 
-        total_authorized = totals["total_auth"] or 0
+        total_authorised = totals["total_auth"] or 0
         total_enrolments = totals["total_enrol"] or 0
 
         # Calculate statistics for each absence type
@@ -225,8 +225,8 @@ def show_detailed_absence_breakdown(
             total = stats["total"] or 0
 
             percentage = (
-                (total / total_authorized * 100)
-                if total_authorized > 0 else 0
+                (total / total_authorised * 100)
+                if total_authorised > 0 else 0
             )
 
             per_student = (
@@ -247,7 +247,7 @@ def show_detailed_absence_breakdown(
         # Add summary note
         console.print(
             f"\n[dim]Total students: {total_enrolments:,} | "
-            f"Total authorized absences: {total_authorized:,}[/dim]"
+            f"Total authorised absences: {total_authorised:,}[/dim]"
         )
 
     except (ValueError, IndexError):
@@ -260,7 +260,7 @@ def display_unauth_absence_stats(
     console: Console
 ) -> None:
     """
-    Display unauthorized absence statistics broken down by region or local authority.
+    Display unauthorised absence statistics broken down by region or local authority.
     
     Args:
         df: PySpark DataFrame containing the data
@@ -295,13 +295,13 @@ def display_unauth_absence_stats(
         show_header=True,
         header_style="bold magenta",
         box=box.ROUNDED,
-        title=f"Unauthorized Absences by {title} in {year}"
+        title=f"Unauthorised Absences by {title} in {year}"
     )
 
     table.add_column(title.rstrip('s'), style="green")
-    table.add_column("Total Unauthorized", justify="right", style="blue")
+    table.add_column("Total Unauthorised", justify="right", style="blue")
     table.add_column("Total Students", justify="right", style="blue")
-    table.add_column("% of All Unauthorized", justify="right", style="yellow")
+    table.add_column("% of All Unauthorised", justify="right", style="yellow")
     table.add_column("Sessions per Student", justify="right", style="cyan")
 
     # Add rows
@@ -332,7 +332,7 @@ def display_unauth_absence_stats(
 
     # Show summary
     console.print(
-        f"\n[dim]Total unauthorized absences: {overall_unauth:,} | "
+        f"\n[dim]Total unauthorised absences: {overall_unauth:,} | "
         f"Total students: {overall_students:,} | "
         f"Overall sessions per student: {(overall_unauth/overall_students if overall_students > 0 else 0):.2f}[/dim]"
     )
@@ -954,11 +954,11 @@ def handle_school_type_query(
     display_absence_stats(result, school_type, console)
     return result, True
 
-def handle_unauthorized_absences_query(
+def handle_unauthorised_absences_query(
     df: DataFrame,
     console: Console
 ) -> Tuple[DataFrame, bool]:
-    """Handle unauthorized absences query workflow.
+    """Handle unauthorised absences query workflow.
     
     Args:
         df: Input DataFrame
@@ -1000,7 +1000,7 @@ def analyse_absence_patterns(
     console: Console
 ) -> Tuple[DataFrame, bool]:
     """
-    Analyze patterns between school types, locations, and absence rates.
+    Analyse patterns between school types, locations, and absence rates.
     
     Args:
         df: Input DataFrame
@@ -1034,8 +1034,8 @@ def analyse_absence_patterns(
 
         # Display summary statistics
         console.print("\n[bold]Analysis Summary:[/bold]")
-        console.print(f"• Number of school types analyzed: {len(school_types)}")
-        console.print(f"• Number of regions analyzed: {len(regions)}")
+        console.print(f"• Number of school types analysed: {len(school_types)}")
+        console.print(f"• Number of regions analysed: {len(regions)}")
         console.print(f"• Time period: {min(years)} to {max(years)}")
 
         # Calculate overall patterns

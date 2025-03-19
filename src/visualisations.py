@@ -3,6 +3,8 @@ from typing import List, Dict, Any, Tuple
 import logging
 import traceback
 
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 from pyspark.sql import DataFrame
@@ -95,7 +97,7 @@ def analyse_regional_attendance(
     df: DataFrame,
     console: Console
 ) -> bool:
-    """Analyze regional attendance performance over time.
+    """Analyse regional attendance performance over time.
     
     Args:
         df: Input DataFrame containing the data
@@ -376,7 +378,7 @@ def display_regional_analysis(data: DataFrame, console: Console) -> None:
     console.print("\n[bold]Detailed Regional Performance:[/bold]")
     console.print(table)
     
-    console.print("\n[bold]Visualization files created:[/bold]")
+    console.print("\n[bold]Visualisation files created:[/bold]")
     console.print("• plots/regional_attendance_trends.png")
     console.print("• plots/regional_absence_comparison.png")
     console.print("• plots/regional_attendance_improvement.png") 
@@ -386,7 +388,7 @@ def create_absence_pattern_plots(
     console: Console
 ) -> bool:
     """
-    Create visualizations showing relationships between school types and absence rates.
+    Create visualisations showing relationships between school types and absence rates.
     Uses pre-calculated absence rates from analyse_absence_patterns().
     
     Args:
@@ -394,7 +396,7 @@ def create_absence_pattern_plots(
         console: Rich console instance
         
     Returns:
-        bool: True if visualization was successful
+        bool: True if visualisation was successful
     """
     try:
         filtered_df = df.filter(
@@ -479,13 +481,13 @@ def create_absence_pattern_plots(
 
         # Display completion message
         console.print("\n[bold green]Plots created successfully![/bold green]")
-        console.print("\n[bold]Visualization files created:[/bold]")
+        console.print("\n[bold]Visualisation files created:[/bold]")
         console.print("• plots/regional_heatmap.png - Regional absence rates by school type")
         console.print("• plots/trends_by_type.png - Absence rate trends by school type")
         
         return True
         
     except Exception as e:
-        console.print(f"[bold red]Error creating visualization:[/bold red] {str(e)}")
+        console.print(f"[bold red]Error creating visualisation:[/bold red] {str(e)}")
         traceback.print_exc()
         return False 
