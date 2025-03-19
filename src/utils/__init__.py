@@ -1,8 +1,10 @@
 """
-School Attendance Data Analysis Package.
+Utility modules for the School Attendance Data Analysis Package.
 
-This package provides tools and utilities for analyzing school attendance data
-using PySpark.
+This package provides utility functions for:
+- Spark session management
+- Data handling and processing
+- Display and UI components
 """
 
 from src.utils.spark_utils import (
@@ -28,18 +30,8 @@ from src.utils.display_utils import (
     create_status_panel
 )
 
-from src.queries import (
-    handle_local_authority_query,
-    handle_school_type_query,
-    handle_unauthorized_absences_query,
-    analyze_absence_patterns
-)
-
-__version__ = '1.0.0'
-__author__ = '240030614'
-
 __all__ = [
-    # Spark utilities
+    # Spark session management
     'create_spark_session',
     'stop_spark_session',
     'get_active_session',
@@ -57,11 +49,5 @@ __all__ = [
     'create_progress',
     'display_dataframe_preview',
     'create_menu_table',
-    'create_status_panel',
-    
-    # Query helpers
-    'handle_local_authority_query',
-    'handle_school_type_query',
-    'handle_unauthorized_absences_query',
-    'analyze_absence_patterns'
+    'create_status_panel'
 ]

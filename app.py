@@ -38,7 +38,7 @@ from src.utils.display_utils import (
     create_menu_table,
     create_status_panel
 )
-from src.query_helpers import (
+from src.queries import (
     handle_local_authority_query,
     handle_school_type_query,
     handle_unauthorized_absences_query,
