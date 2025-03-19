@@ -1,48 +1,101 @@
 # Practical 1 - Console App For Data Analysis
 
-240030614
+Author: 240030614
 
-## Project Outline
+## Prerequisites
 
-* Typer for console interface (should be more modern than tkinter)
+- Python 3.8 or higher
+- pip (Python package installer)
+- Java 8 or higher (required for PySpark)
 
-Console choices:
+## Setup and Installation
 
-* Typer (parse args) + Rich (for output formatting)
-* 
+1. Clone the repository:
+   ```bash
+   git clone <repository-url>
+   cd <repository-name>
+   ```
 
-## Preliminary Research - How to start this?
+2. Create and activate a virtual environment:
+   ```bash
+   # On macOS/Linux
+   python -m venv venv
+   source venv/bin/activate
 
-### functionality - part 1
+   # On Windows
+   python -m venv venv
+   .\venv\Scripts\activate
+   ```
 
-* read_csv
-* store dataset (which methods provided?)
-* search by:
-  * (local authority / time_period)
-  * (school_type / absences / time_period)
-  * unauthorised absences in certain year  by region name / local auth name
+3. Install required dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-TODO: 
+4. Prepare data directories:
+   ```bash
+   mkdir -p data/raw data/processed
+   ```
+   Place your input CSV files in the `data/raw` directory. The application will save processed data to `data/processed` by default.
 
-select a certain year before showing the school type absences to advere more with the practical specs
+## Project Structure
 
-give a time period (eg 200809 - 201011) to the school_type query
+```
+.
+├── app.py              # Main application file
+├── src/               # Source code directory
+├── data/              # Data directory
+│   ├── raw/          # Raw CSV files directory
+│   └── processed/    # Default save location for processed data
+├── plots/             # Generated plots and visualizations
+└── requirements.txt   # Project dependencies
+```
 
-### functionality - part 2
+## Running the Application
 
-* compare local auths (use search beforehand)
-* explore performances etc
+1. Ensure your virtual environment is activated:
+   ```bash
+   # On macOS/Linux
+   source venv/bin/activate
 
-### functionality - part 3
+   # On Windows
+   .\venv\Scripts\activate
+   ```
 
-* explore links between data (how?)
+2. Run the main application:
+   ```bash
+   python app.py
+   ```
 
-## infos about sparks
+## Available Commands
 
-### spark sessions
+The application provides an interactive console interface with the following options:
 
-master() allows: `local[x]` with x being the number of partitions (ideally = cores) or `spark://master:7077` for standalone
+1. Load Data - Load and process CSV files
+2. Query by Local Authority - Analyze data for specific local authorities
+3. Query by School Type - Filter and analyze data by school types
+4. Analyze Unauthorized Absences - Study patterns in unauthorized absences
+5. Generate Visualizations - Create plots and charts for data analysis
+6. Exit - Quit the application
 
-### visualise spark df in matplotlib
+## Troubleshooting
 
-* how is this accomplished?
+1. If you encounter Java-related errors:
+   - Ensure Java 8 or higher is installed
+   - Set JAVA_HOME environment variable correctly
+
+2. If you see PySpark initialization warnings:
+   - These are normal and won't affect functionality
+   - You can set SPARK_LOCAL_IP if needed
+
+3. For data loading issues:
+   - Ensure CSV files are present in the data/ directory
+   - Check file permissions
+
+## Notes
+
+- The application uses PySpark for data processing, which may take a few seconds to initialize on first run
+- Generated plots are saved in the plots/ directory
+- Use Ctrl+C to force quit the application if needed
+
+

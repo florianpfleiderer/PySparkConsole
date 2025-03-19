@@ -28,7 +28,7 @@ def display_enrollment_stats(
     """
     # Create pivot table of enrollments by LA and year
     pivot_df = df.groupBy("la_name").pivot("time_period").agg(
-        F.sum("enrolments").alias("enrollments")
+        F.sum("enrolments")
     ).orderBy("la_name")
 
     # Get all years in order
@@ -125,21 +125,21 @@ def display_absence_stats(
         # Calculate totals
         stats = year_data.agg(
             F.sum("sess_authorised").alias("total_absences"),
-            F.sum("enrolments").alias("total_enrollments")
+            F.sum("enrolments").alias("total_enrolments")
         ).collect()[0]
 
         total_absences = stats["total_absences"] or 0
-        total_enrollments = stats["total_enrollments"] or 0
+        total_enrolments = stats["total_enrolments"] or 0
 
         # Calculate absences per student
         absences_per_student = (
-            total_absences / total_enrollments if total_enrollments > 0 else 0
+            total_absences / total_enrolments if total_enrolments > 0 else 0
         )
 
         table.add_row(
             str(year),
             f"{total_absences:,}",
-            f"{total_enrollments:,}",
+            f"{total_enrolments:,}",
             f"{absences_per_student:.2f}"
         )
 
@@ -213,7 +213,7 @@ def show_detailed_absence_breakdown(
         ).collect()[0]
 
         total_authorized = totals["total_auth"] or 0
-        total_enrollments = totals["total_enrol"] or 0
+        total_enrolments = totals["total_enrol"] or 0
 
         # Calculate statistics for each absence type
         for col, description in absence_types.items():
@@ -226,8 +226,8 @@ def show_detailed_absence_breakdown(
             )
 
             per_student = (
-                total / total_enrollments
-                if total_enrollments > 0 else 0
+                total / total_enrolments
+                if total_enrolments > 0 else 0
             )
 
             detail_table.add_row(
@@ -242,7 +242,7 @@ def show_detailed_absence_breakdown(
 
         # Add summary note
         console.print(
-            f"\n[dim]Total students: {total_enrollments:,} | "
+            f"\n[dim]Total students: {total_enrolments:,} | "
             f"Total authorized absences: {total_authorized:,}[/dim]"
         )
 
@@ -264,8 +264,12 @@ def display_unauth_absence_stats(
         year: Selected year
         console: Rich console instance for output
     """
-    # Filter for selected year
-    year_data = df.filter(F.col("time_period") == year)
+    # Filter for selected year and non-null values
+    year_data = df.filter(
+        (F.col("time_period") == year) &
+        (F.col(breakdown_by).isNotNull()) &
+        (F.col(breakdown_by) != "null")
+    )
 
     # Group by region/LA and calculate statistics
     stats = (year_data.groupBy(breakdown_by)
@@ -276,13 +280,10 @@ def display_unauth_absence_stats(
             .orderBy(breakdown_by))
 
     # Calculate overall totals for percentages
-    totals = stats.agg(
-        F.sum("total_unauth").alias("total_unauth"),
-        F.sum("total_students").alias("total_students")
-    ).collect()[0]
+    totals = stats.agg(F.sum("total_unauth"), F.sum("total_students")).collect()[0]
 
-    overall_unauth = totals["total_unauth"] or 0
-    overall_students = totals["total_students"] or 0
+    overall_unauth = totals[0] or 0
+    overall_students = totals[1] or 0
 
     # Create table for displaying statistics
     title = "Regions" if breakdown_by == "region_name" else "Local Authorities"
@@ -489,12 +490,17 @@ def get_distinct_values(
     Returns:
         Tuple of values list and counts dictionary
     """
+    # Filter out None values and get distinct values
+    filtered_df = df.filter(F.col(column).isNotNull())
     values = [
-        row[0] for row in df.select(column).distinct().orderBy(column).collect()
+        row[0] for row in filtered_df.select(column)
+        .distinct()
+        .orderBy(column)
+        .collect()
     ]
 
     if with_counts:
-        value_counts = df.groupBy(column).count().orderBy(column).collect()
+        value_counts = filtered_df.groupBy(column).count().orderBy(column).collect()
         count_dict = {row[0]: row[1] for row in value_counts}
         return values, count_dict
 
@@ -668,6 +674,12 @@ def handle_local_authority_query(
     Returns:
         Tuple of (result DataFrame, whether to save result)
     """
+    # First filter for Local authority level and Total school type
+    base_df = df.filter(
+        (F.col("geographic_level") == "Local authority") & 
+        (F.col("school_type") == "Total")
+    )
+    
     column = "la_name"
     title = "Local Authority"
 
@@ -676,7 +688,7 @@ def handle_local_authority_query(
         TextColumn("[green]Getting values...[/green]")
     ) as progress:
         task = progress.add_task("", total=None)
-        values, counts = get_distinct_values(df, column, True)
+        values, counts = get_distinct_values(base_df, column, True)
 
     # Show analysis options
     analysis_table = Table(
@@ -697,9 +709,9 @@ def handle_local_authority_query(
     analysis_choice = Prompt.ask("Enter choice", choices=["1", "2"])
 
     if analysis_choice == "1":
-        return handle_enrollment_analysis(df, values, counts, column, title, console)
+        return handle_enrollment_analysis(base_df, values, counts, column, title, console)
     else:
-        return handle_authority_comparison(df, values, title, console)
+        return handle_authority_comparison(base_df, values, title, console)
 
 def handle_enrollment_analysis(
     df: DataFrame,
@@ -759,14 +771,16 @@ def handle_authority_comparison(
     # Get first authority
     console.print("\nSelect first local authority:")
     auth1, _ = select_single_value(values, console)
+    console.print(f"[bold green]Selected first authority:[/bold green] {auth1}")
     
     # Get second authority
     console.print("\nSelect second local authority:")
     while True:
         auth2, _ = select_single_value(values, console)
         if auth2 != auth1:
+            console.print(f"[bold green]Selected second authority:[/bold green] {auth2}")
             break
-        console.print("[yellow]Please select a different authority[/yellow]")
+        console.print(f"[yellow]Please select a different authority than {auth1}[/yellow]")
     
     # Get year selection
     years = get_available_years(df)
@@ -800,14 +814,17 @@ def handle_school_type_query(
     column = "school_type"
     title = "School Type"
 
+    # Filter for school-level data to get accurate school type information
+    base_df = df.filter(F.col("geographic_level") == "School")
+
     with Progress(
         SpinnerColumn(),
         TextColumn("[green]Getting values...[/green]")
     ) as progress:
         task = progress.add_task("", total=None)
-        values, counts = get_distinct_values(df, column, True)
+        values, _ = get_distinct_values(base_df, column, False)
 
-    display_value_table(values, title, console, counts)
+    display_value_table(values, title, console)
 
     selected_val, is_all = select_single_value(
         values,
@@ -819,7 +836,7 @@ def handle_school_type_query(
     # First filter by school type
     if is_all:
         console.print(f"[bold green]Showing all values for {title}:[/bold green]")
-        result = df
+        result = base_df
         school_type = "All School Types"
     else:
         with Progress(
@@ -827,7 +844,7 @@ def handle_school_type_query(
             TextColumn("[green]Filtering data...[/green]")
         ) as progress:
             task = progress.add_task("", total=None)
-            result = df.filter(df[column] == selected_val)
+            result = base_df.filter(base_df[column] == selected_val)
         school_type = selected_val
 
     # Now handle time period selection
@@ -907,8 +924,14 @@ def handle_unauthorized_absences_query(
 
     breakdown_choice = Prompt.ask("Enter choice", choices=["1", "2"])
     breakdown_col = "region_name" if breakdown_choice == "1" else "la_name"
+    geographic_level = "Regional" if breakdown_choice == "1" else "Local authority"
 
-    display_unauth_absence_stats(df, breakdown_col, selected_year, console)
+    base_df = df.filter(
+        (F.col("geographic_level") == geographic_level) & 
+        (F.col("school_type") == "Total")
+    )
+
+    display_unauth_absence_stats(base_df, breakdown_col, selected_year, console)
     return df, False
 
 def analyze_absence_patterns(
@@ -926,17 +949,23 @@ def analyze_absence_patterns(
         Tuple of (processed DataFrame, whether to save result)
     """
     try:
+        base_df = df.filter(
+            (F.col("geographic_level") == "Regional") & 
+            (F.col("school_type") != "Total") &
+            (F.col("region_name").isNotNull()) & 
+            (F.col("region_name") != "null")
+        )
         # Get unique school types and regions
         school_types = [row[0] for row in 
-                       df.select("school_type").distinct().orderBy("school_type").collect()]
+                       base_df.select("school_type").distinct().orderBy("school_type").collect()]
         regions = [row[0] for row in 
                   df.select("region_name").distinct().orderBy("region_name").collect()]
         years = [row[0] for row in 
                 df.select("time_period").distinct().orderBy("time_period").collect()]
 
-        # Calculate average absence rates by school type, region, and year
+        # Calculate weighted absence rates by school type, region, and year
         result = df.groupBy("school_type", "region_name", "time_period").agg(
-            F.avg("sess_overall_percent").alias("avg_absence_rate")
+            (100.0 * F.sum("sess_overall") / F.sum("sess_possible")).alias("avg_absence_rate")
         ).orderBy("time_period", "school_type", "region_name")
 
         # Display summary statistics
