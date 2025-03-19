@@ -31,8 +31,12 @@ def display_enrollment_stats(
         F.sum("enrolments")
     ).orderBy("la_name")
 
-    # Get all years in order
+    # Get all years in order from the filtered data
     years = sorted([col for col in pivot_df.columns if col != "la_name"])
+    
+    if not years:
+        console.print("[red]No data found for the selected time period[/red]")
+        return
 
     # Create formatted table
     table = Table(
@@ -538,20 +542,27 @@ def display_value_table(
 def select_multiple_values(
     values: List[str],
     console: Console,
-    prompt_text: str = "Select value number to add"
+    prompt_text: str = "Select value number to add",
+    max_selections: int = 6
 ) -> List[str]:
     """Let user select multiple values from a list.
     
     Args:
         values: List of values to choose from
-        console: Rich console instance
+        console: Console instance
         prompt_text: Custom prompt text
+        max_selections: Maximum number of items that can be selected
         
     Returns:
         List of selected values
     """
     selected = []
     while True:
+        # Show remaining selections
+        remaining = max_selections - len(selected)
+        if remaining > 0:
+            console.print(f"[blue]You can select {remaining} more item{'s' if remaining != 1 else ''}[/blue]")
+        
         val_choice = Prompt.ask(
             f"{prompt_text} (or 'a' for all, 'd' when done, 'c' to cancel)"
         )
@@ -559,6 +570,9 @@ def select_multiple_values(
         if val_choice.lower() == 'c':
             return []
         elif val_choice.lower() == 'a':
+            if len(values) > max_selections:
+                console.print(f"[red]Cannot select all - maximum {max_selections} selections allowed[/red]")
+                continue
             return values
         elif val_choice.lower() == 'd':
             if not selected:
@@ -571,6 +585,9 @@ def select_multiple_values(
             if 0 <= index < len(values):
                 value = values[index]
                 if value not in selected:
+                    if len(selected) >= max_selections:
+                        console.print(f"[red]Maximum {max_selections} selections allowed[/red]")
+                        continue
                     selected.append(value)
                     console.print(f"[green]Added: {value}[/green]")
                 else:
@@ -744,7 +761,51 @@ def handle_enrollment_analysis(
     if not selected_authorities:
         return df, False
 
+    # Get available years
+    years = get_available_years(df)
+    
+    # Show time period options
+    time_table = Table(show_header=True, header_style="bold magenta")
+    time_table.add_column("#", style="dim", width=6)
+    time_table.add_column("Option", style="green")
+    
+    time_options = ["Single Year", "Year Range", "All Years"]
+    for i, option in enumerate(time_options, 1):
+        time_table.add_row(str(i), option)
+    
+    console.print("\nSelect time period type:")
+    console.print(time_table)
+    
+    time_choice = Prompt.ask("Enter choice", choices=["1", "2", "3"])
+    
     result = df.filter(F.col(column).isin(selected_authorities))
+    
+    if time_choice == "1":  # Single year
+        display_year_selection(years, console)
+        selected_year = select_year(years, console)
+        result = result.filter(F.col("time_period") == selected_year)
+        time_desc = f"Year {selected_year}"
+    elif time_choice == "2":  # Year range
+        console.print("\nSelect start year:")
+        display_year_selection(years, console)
+        start_year = select_year(years, console)
+        
+        console.print("\nSelect end year:")
+        while True:
+            end_year = select_year(years, console)
+            if end_year >= start_year:
+                break
+            console.print("[yellow]End year must be after start year[/yellow]")
+        
+        result = result.filter(
+            (F.col("time_period") >= start_year) & 
+            (F.col("time_period") <= end_year)
+        )
+        time_desc = f"Years {start_year}-{end_year}"
+    else:  # All years
+        time_desc = "All Years"
+
+    console.print(f"\n[bold green]Results for selected authorities, {time_desc}:[/bold green]")
     display_enrollment_stats(result, selected_authorities, console)
 
     return result, True
