@@ -397,9 +397,8 @@ def create_absence_pattern_plots(
         bool: True if visualization was successful
     """
     try:
-        # Filter out "Total" school type and null regions
         filtered_df = df.filter(
-            # (F.col("school_type") != "Total") &
+            (F.col("school_type") != "Total") &
             (F.col("region_name").isNotNull()) & 
             (F.col("region_name") != "null")
         )
@@ -419,7 +418,7 @@ def create_absence_pattern_plots(
                         for row in pivot_data.collect()])
         
         # Create heatmap
-        plt.figure(figsize=(15, 8))
+        plt.figure(figsize=(15, 7))
         heatmap = plt.imshow(data, aspect='auto', cmap='YlOrRd')
         plt.colorbar(heatmap, label='Average Absence Rate (%)')
         plt.xticks(range(len(regions)), regions, rotation=45, ha='right')

@@ -1011,21 +1011,21 @@ def analyze_absence_patterns(
     """
     try:
         base_df = df.filter(
-            (F.col("geographic_level") == "Regional") & 
+            (F.col("geographic_level") == "Regional") &
             (F.col("school_type") != "Total") &
-            (F.col("region_name").isNotNull()) & 
+            (F.col("region_name").isNotNull()) &
             (F.col("region_name") != "null")
         )
         # Get unique school types and regions
-        school_types = [row[0] for row in 
+        school_types = [row[0] for row in
                        base_df.select("school_type").distinct().orderBy("school_type").collect()]
-        regions = [row[0] for row in 
-                  df.select("region_name").distinct().orderBy("region_name").collect()]
-        years = [row[0] for row in 
-                df.select("time_period").distinct().orderBy("time_period").collect()]
+        regions = [row[0] for row in
+                  base_df.select("region_name").distinct().orderBy("region_name").collect()]
+        years = [row[0] for row in
+                base_df.select("time_period").distinct().orderBy("time_period").collect()]
 
         # Calculate weighted absence rates by school type, region, and year
-        result = df.groupBy("school_type", "region_name", "time_period").agg(
+        result = base_df.groupBy("school_type", "region_name", "time_period").agg(
             (100.0 * F.sum("sess_overall") / F.sum("sess_possible")).alias("avg_absence_rate")
         ).orderBy("time_period", "school_type", "region_name")
 
