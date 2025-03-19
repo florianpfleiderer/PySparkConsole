@@ -407,7 +407,9 @@ def create_absence_pattern_plots(
         pivot_data = (
             filtered_df.groupBy("school_type")
             .pivot("region_name")
-            .agg(F.avg("avg_absence_rate"))
+            .agg(
+                (100.0 * F.sum("total_sessions") / F.sum("total_possible_sessions")).alias("avg_absence_rate")
+            )
             .orderBy("school_type")
         )
         
@@ -438,10 +440,14 @@ def create_absence_pattern_plots(
         # Create trend lines plot
         plt.figure(figsize=(15, 8))
         
-        # Get data for each school type over time, averaging across regions
+        # Get data for each school type over time, using weighted averages
         trend_data = (
             filtered_df.groupBy("school_type", "time_period")
-            .agg(F.avg("avg_absence_rate").alias("avg_rate"))
+            .agg(
+                F.sum("total_sessions").alias("total_sessions"),
+                F.sum("total_possible_sessions").alias("total_possible_sessions"),
+                (100.0 * F.sum("total_sessions") / F.sum("total_possible_sessions")).alias("avg_rate")
+            )
             .orderBy("school_type", "time_period")
         )
         

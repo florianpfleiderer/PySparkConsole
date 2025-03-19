@@ -1026,7 +1026,9 @@ def analyze_absence_patterns(
 
         # Calculate weighted absence rates by school type, region, and year
         result = base_df.groupBy("school_type", "region_name", "time_period").agg(
-            (100.0 * F.sum("sess_overall") / F.sum("sess_possible")).alias("avg_absence_rate")
+            (100.0 * F.sum("sess_overall") / F.sum("sess_possible")).alias("avg_absence_rate"),
+            F.sum("sess_overall").alias("total_sessions"),
+            F.sum("sess_possible").alias("total_possible_sessions")
         ).orderBy("time_period", "school_type", "region_name")
 
         # Display summary statistics
@@ -1037,7 +1039,9 @@ def analyze_absence_patterns(
 
         # Calculate overall patterns
         patterns_df = result.groupBy("school_type", "region_name").agg(
-            F.avg("avg_absence_rate").alias("avg_absence_rate")
+            F.sum("total_sessions").alias("total_sessions"),
+            F.sum("total_possible_sessions").alias("total_possible_sessions"),
+            (100.0 * F.sum("total_sessions") / F.sum("total_possible_sessions")).alias("avg_absence_rate")
         ).orderBy(F.desc("avg_absence_rate"))
 
         # Find highest absence rates by school type and region
@@ -1054,9 +1058,11 @@ def analyze_absence_patterns(
                 f"{row['avg_absence_rate']:.1f}% average absence rate"
             )
 
-        # Calculate school type averages
+        # Calculate school type averages using raw session counts
         school_type_avg = patterns_df.groupBy("school_type").agg(
-            F.avg("avg_absence_rate").alias("avg_rate")
+            F.sum("total_sessions").alias("total_sessions"),
+            F.sum("total_possible_sessions").alias("total_possible_sessions"),
+            (100.0 * F.sum("total_sessions") / F.sum("total_possible_sessions")).alias("avg_rate")
         ).orderBy(F.desc("avg_rate")).collect()
 
         console.print("\n[bold]School Type Analysis:[/bold]")
@@ -1066,9 +1072,11 @@ def analyze_absence_patterns(
                 f"{row['avg_rate']:.1f}% across all regions"
             )
 
-        # Calculate regional averages
+        # Calculate regional averages using raw session counts
         region_avg = patterns_df.groupBy("region_name").agg(
-            F.avg("avg_absence_rate").alias("avg_rate")
+            F.sum("total_sessions").alias("total_sessions"),
+            F.sum("total_possible_sessions").alias("total_possible_sessions"),
+            (100.0 * F.sum("total_sessions") / F.sum("total_possible_sessions")).alias("avg_rate")
         ).orderBy(F.desc("avg_rate")).collect()
 
         console.print("\n[bold]Regional Analysis:[/bold]")
