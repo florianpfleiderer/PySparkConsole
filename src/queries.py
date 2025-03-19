@@ -1035,6 +1035,64 @@ def analyze_absence_patterns(
         console.print(f"• Number of regions analyzed: {len(regions)}")
         console.print(f"• Time period: {min(years)} to {max(years)}")
 
+        # Calculate overall patterns
+        patterns_df = result.groupBy("school_type", "region_name").agg(
+            F.avg("avg_absence_rate").alias("avg_absence_rate")
+        ).orderBy(F.desc("avg_absence_rate"))
+
+        # Find highest absence rates by school type and region
+        top_patterns = patterns_df.collect()
+
+        # Display key findings
+        console.print("\n[bold cyan]Key Findings:[/bold cyan]")
+        
+        # Top 3 highest absence rate combinations
+        console.print("\n[bold]Highest Absence Rate Combinations:[/bold]")
+        for i, row in enumerate(top_patterns[:3], 1):
+            console.print(
+                f"[yellow]{i}.[/yellow] {row['school_type']} schools in {row['region_name']}: "
+                f"{row['avg_absence_rate']:.1f}% average absence rate"
+            )
+
+        # Calculate school type averages
+        school_type_avg = patterns_df.groupBy("school_type").agg(
+            F.avg("avg_absence_rate").alias("avg_rate")
+        ).orderBy(F.desc("avg_rate")).collect()
+
+        console.print("\n[bold]School Type Analysis:[/bold]")
+        for row in school_type_avg[:3]:
+            console.print(
+                f"• {row['school_type']} schools have an average absence rate of "
+                f"{row['avg_rate']:.1f}% across all regions"
+            )
+
+        # Calculate regional averages
+        region_avg = patterns_df.groupBy("region_name").agg(
+            F.avg("avg_absence_rate").alias("avg_rate")
+        ).orderBy(F.desc("avg_rate")).collect()
+
+        console.print("\n[bold]Regional Analysis:[/bold]")
+        for row in region_avg[:3]:
+            console.print(
+                f"• {row['region_name']} has an average absence rate of "
+                f"{row['avg_rate']:.1f}% across all school types"
+            )
+
+        # Overall conclusion
+        console.print("\n[bold green]Summary Conclusion:[/bold green]")
+        highest_combo = top_patterns[0]
+        highest_type = school_type_avg[0]
+        highest_region = region_avg[0]
+        
+        console.print(
+            f"The analysis shows that {highest_type['school_type']} schools tend to have "
+            f"the highest absence rates overall ({highest_type['avg_rate']:.1f}%), "
+            f"with the highest rates specifically observed in {highest_combo['region_name']} "
+            f"({highest_combo['avg_absence_rate']:.1f}%). "
+            f"\nRegionally, {highest_region['region_name']} shows the highest average "
+            f"absence rates ({highest_region['avg_rate']:.1f}%) across all school types."
+        )
+
         return result, True
 
     except Exception as e:

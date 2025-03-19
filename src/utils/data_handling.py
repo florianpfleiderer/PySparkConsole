@@ -199,11 +199,22 @@ def load_csv_data(
         - Dictionary of null value counts by column
     """
     try:
-        # Load the data
-        df = spark.read.format("csv") \
-            .option("header", "true") \
-            .option("inferSchema", "true") \
-            .load(str(file_path))
+        # Load the data with appropriate options based on the source
+        if is_directory:
+            # For saved data in directory format
+            df = spark.read.format("csv") \
+                .option("header", "true") \
+                .option("inferSchema", "true") \
+                .option("quote", "\"") \
+                .option("escape", "\"") \
+                .option("multiLine", "true") \
+                .load(str(file_path))
+        else:
+            # For raw CSV files
+            df = spark.read.format("csv") \
+                .option("header", "true") \
+                .option("inferSchema", "true") \
+                .load(str(file_path))
             
         # Count null values
         null_counts = {
@@ -292,11 +303,20 @@ def save_dataframe(
         # Create parent directory if it doesn't exist
         save_path.parent.mkdir(parents=True, exist_ok=True)
         
-        # Save the DataFrame
-        df.write \
-            .format(file_format) \
-            .mode(mode) \
-            .save(str(save_path))
+        # Repartition to 1 partition and save the DataFrame
+        if file_format == "csv":
+            # For CSV, we need to handle the header properly
+            df.write.format(file_format) \
+                .option("header", "true") \
+                .option("quote", "\"") \
+                .option("escape", "\"") \
+                .mode(mode) \
+                .save(str(save_path))
+        else:
+            # For other formats (parquet, json)
+            df.write.format(file_format) \
+                .mode(mode) \
+                .save(str(save_path))
             
         # Get information about saved files
         saved_files = list(save_path.glob("*"))

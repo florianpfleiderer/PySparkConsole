@@ -224,11 +224,14 @@ class SparkDataConsoleApp:
                         description="[green]Data loaded, checking for null values...[/green]"
                     )
                     
-                    # Create null value table
-                    null_table, cols_with_nulls = create_null_value_table(
-                        self.df,
-                        null_counts
-                    )
+                    # Only create null value table if there are actual null values
+                    has_nulls = any(count > 0 for count in null_counts.values())
+                    if has_nulls:
+                        # Create null value table
+                        null_table, cols_with_nulls = create_null_value_table(
+                            self.df,
+                            null_counts
+                        )
                     
                     row_count = self.df.count()
                     progress.update(
@@ -236,7 +239,7 @@ class SparkDataConsoleApp:
                         description=f"[green]Loaded {row_count} rows successfully![/green]"
                     )
                 
-                if null_table:
+                if has_nulls and null_table:
                     self.console.print("\n[bold red]Warning: Null values detected in the dataset![/bold red]")
                     self.console.print(null_table)
                     
@@ -337,6 +340,16 @@ class SparkDataConsoleApp:
         if self.df is None:
             self.console.print("[bold red]No data loaded. Please load data first.[/bold red]")
             return
+        
+        # Ensure plots directory exists
+        plots_dir = Path("plots")
+        if not plots_dir.exists():
+            try:
+                plots_dir.mkdir(parents=True, exist_ok=True)
+                self.console.print("[green]Created plots directory[/green]")
+            except Exception as e:
+                self.console.print(f"[bold red]Error creating plots directory:[/bold red] {str(e)}")
+                return
         
         self.console.print(Panel("[bold]Visualize Data[/bold]", border_style="yellow"))
         
