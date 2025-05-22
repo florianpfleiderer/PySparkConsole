@@ -36,7 +36,7 @@ from src.queries import (
 )
 
 __version__ = '1.0.0'
-__author__ = '240030614'
+__author__ = 'FP'
 
 __all__ = [
     # Spark utilities
