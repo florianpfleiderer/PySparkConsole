@@ -1,101 +1,78 @@
-# Practical 1 - Console App For Data Analysis
+# Data Analysis Console App
 
-Author: 240030614
+A Python-based console application for analyzing school attendance data across different local authorities and school types. Built with PySpark for efficient data processing and analysis.
 
 ## Prerequisites
 
-- Python 3.8 or higher
-- pip (Python package installer)
-- Java 8 or higher (required for PySpark)
+- Python 3.8+
+- pip
+- Java 8+ (for PySpark)
 
-## Setup and Installation
+## Setup
 
-1. Clone the repository:
+1. Clone and enter the repository:
    ```bash
    git clone <repository-url>
    cd <repository-name>
    ```
 
-2. Create and activate a virtual environment:
+2. Set up virtual environment:
    ```bash
-   # On macOS/Linux
    python -m venv venv
-   source venv/bin/activate
-
-   # On Windows
-   python -m venv venv
-   .\venv\Scripts\activate
+   source venv/bin/activate  # On macOS/Linux
+   # or
+   .\venv\Scripts\activate   # On Windows
    ```
 
-3. Install required dependencies:
+3. Install dependencies:
    ```bash
    pip install -r requirements.txt
    ```
 
-4. Prepare data directories:
+4. Create data directories:
    ```bash
    mkdir -p data/raw data/processed
    ```
-   Place your input CSV files in the `data/raw` directory. The application will save processed data to `data/processed` by default.
 
 ## Project Structure
 
 ```
 .
-├── app.py              # Main application file
-├── src/               # Source code directory
-├── data/              # Data directory
-│   ├── raw/          # Raw CSV files directory
-│   └── processed/    # Default save location for processed data
-├── plots/             # Generated plots and visualisations
-└── requirements.txt   # Project dependencies
+├── app.py              # Main application
+├── src/               # Source code
+├── data/              # Data storage
+│   ├── raw/          # Input CSV files
+│   └── processed/    # Processed data
+├── plots/             # Visualizations
+└── requirements.txt   # Dependencies
 ```
 
-## Running the Application
+## Usage
 
-1. Ensure your virtual environment is activated:
+1. Activate virtual environment:
    ```bash
-   # On macOS/Linux
-   source venv/bin/activate
-
-   # On Windows
-   .\venv\Scripts\activate
+   source venv/bin/activate  # On macOS/Linux
+   # or
+   .\venv\Scripts\activate   # On Windows
    ```
 
-2. Run the main application:
+2. Run the application:
    ```bash
-   python3 app.py
+   python app.py
    ```
 
-## Available Commands
+## Features
 
-The application provides an interactive console interface with the following options:
-
-1. Load Data - Load and process CSV files
-2. Query by Local Authority - Analyse data for specific local authorities
-3. Query by School Type - Filter and analyse data by school types
-4. Analyse Unauthorised Absences - Study patterns in unauthorised absences
-5. Generate Visualisations - Create plots and charts for data analysis
-6. Exit - Quit the application
+- Load and process CSV files
+- Query by local authority
+- Filter by school type
+- Analyze unauthorized absences
+- Generate visualizations
 
 ## Troubleshooting
 
-1. If you encounter Java-related errors:
-   - Ensure Java 8 or higher is installed
-   - Set JAVA_HOME environment variable correctly
-
-2. If you see PySpark initialisation warnings:
-   - These are normal and won't affect functionality
-   - You can set SPARK_LOCAL_IP if needed
-
-3. For data loading issues:
-   - Ensure CSV files are present in the data/ directory
-   - Check file permissions
-
-## Notes
-
-- The application uses PySpark for data processing, which may take a few seconds to initialise on first run
-- Generated plots are saved in the plots/ directory
-- Use Ctrl+C to force quit the application if needed
+- Java errors: Ensure Java 8+ is installed and JAVA_HOME is set
+- PySpark warnings: Normal on first run
+- Data loading: Check CSV files exist in data/ directory
 
 
