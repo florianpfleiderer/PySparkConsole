@@ -4,6 +4,7 @@
 ### my own files ###
 data/raw/*
 data/processed/*
+!data/processed/demo_data/
 src/_version.py
 tmp/*
 plots/*
